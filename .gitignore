@@ -1,2 +1,7 @@
 docs/agreement.docx
 docs/SOW.docx
+
+# Environment variables
+.env
+.env.local
+.env.*.local
