@@ -1,0 +1,220 @@
+/* Color Scheme - Daylily Auction Theme */
+:root {
+    --sky-blue: #4FA3D1;
+    --sky-blue-light: #7BB8D9;
+    --sky-blue-dark: #2C5A7B;
+    --gold: #D4AF37;
+    --gold-light: #E8C547;
+    --magenta: #E91E63;
+    --magenta-light: #F06292;
+    --dark-navy: #1A3A52;
+    --light-cream: #F8F9FA;
+    --text-dark: #2C3E50;
+}
+
+/* Header Styling */
+header.bg-light {
+    background: linear-gradient(135deg, #E8F4F8 0%, #F5FBFD 100%) !important;
+    border-bottom: 3px solid var(--sky-blue);
+}
+
+header h1 {
+    color: var(--dark-navy);
+    font-weight: 700;
+}
+
+header p {
+    color: var(--sky-blue-dark);
+    font-weight: 500;
+}
+
+/* Navigation Bar */
+.navbar.bg-dark {
+    background-color: var(--dark-navy) !important;
+    box-shadow: 0 2px 4px rgba(31, 78, 121, 0.1);
+}
+
+.navbar-dark .nav-link {
+    color: #fff !important;
+    font-weight: 500;
+    transition: color 0.3s ease;
+}
+
+.navbar-dark .nav-link:hover {
+    color: var(--gold-light) !important;
+}
+
+.navbar-dark .nav-link.active {
+    color: var(--gold) !important;
+    border-bottom: 2px solid var(--gold);
+}
+
+/* Buttons */
+.btn-primary {
+    background-color: var(--sky-blue);
+    border-color: var(--sky-blue);
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.btn-primary:hover {
+    background-color: var(--sky-blue-dark);
+    border-color: var(--sky-blue-dark);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(79, 163, 209, 0.3);
+}
+
+.btn-outline-primary {
+    color: var(--sky-blue);
+    border-color: var(--sky-blue);
+}
+
+.btn-outline-primary:hover {
+    background-color: var(--sky-blue);
+    border-color: var(--sky-blue);
+}
+
+/* Accent Button */
+.btn-accent {
+    background-color: var(--magenta);
+    border-color: var(--magenta);
+    color: white;
+}
+
+.btn-accent:hover {
+    background-color: var(--magenta-light);
+    border-color: var(--magenta-light);
+}
+
+/* Cards */
+.card {
+    border: 1px solid #E0E0E0;
+    transition: all 0.3s ease;
+}
+
+.card:hover {
+    border-color: var(--sky-blue);
+    box-shadow: 0 8px 24px rgba(79, 163, 209, 0.15);
+    transform: translateY(-4px);
+}
+
+.card-title {
+    color: var(--dark-navy);
+    font-weight: 600;
+}
+
+/* Badge Colors */
+.badge.bg-success {
+    background-color: #4CAF50 !important;
+}
+
+.badge.bg-warning {
+    background-color: var(--gold) !important;
+    color: var(--dark-navy) !important;
+}
+
+.badge.bg-info {
+    background-color: var(--sky-blue) !important;
+}
+
+/* Text Colors */
+.text-primary {
+    color: var(--sky-blue) !important;
+}
+
+a.text-primary:hover {
+    color: var(--sky-blue-dark) !important;
+}
+
+/* Section Headings */
+h1, h2, h3, h4, h5, h6 {
+    color: var(--dark-navy);
+}
+
+/* Hero Section */
+.jumbotron {
+    background: linear-gradient(135deg, #E8F4F8 0%, #F0F8FB 100%);
+    border-left: 5px solid var(--sky-blue);
+}
+
+.jumbotron .display-4 {
+    color: var(--dark-navy);
+}
+
+.jumbotron .lead {
+    color: var(--text-dark);
+}
+
+/* How It Works Section */
+.bg-light {
+    background-color: var(--light-cream) !important;
+}
+
+.bg-light h2 {
+    color: var(--dark-navy);
+    margin-bottom: 2rem;
+}
+
+/* Icon Colors */
+.fa-search, .fa-gavel, .fa-check-circle {
+    color: var(--sky-blue);
+    transition: color 0.3s ease;
+}
+
+/* Footer */
+footer.bg-dark {
+    background-color: var(--dark-navy) !important;
+    border-top: 3px solid var(--gold);
+}
+
+footer h5 {
+    color: var(--gold);
+    font-weight: 600;
+    margin-bottom: 1rem;
+}
+
+footer a {
+    color: #b0b0b0;
+    transition: color 0.3s ease;
+}
+
+footer a:hover {
+    color: var(--gold);
+}
+
+/* Hover Effects */
+.hover-shadow {
+    transition: all 0.3s ease;
+}
+
+.hover-shadow:hover {
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Links */
+a {
+    color: var(--sky-blue);
+}
+
+a:hover {
+    color: var(--sky-blue-dark);
+}
+
+/* Alert Messages */
+.alert-success {
+    background-color: #f0f9f5;
+    border-color: #4CAF50;
+    color: #155724;
+}
+
+.alert-warning {
+    background-color: #fff9e6;
+    border-color: var(--gold);
+    color: var(--dark-navy);
+}
+
+.alert-danger {
+    background-color: #fadbd8;
+    border-color: #e74c3c;
+    color: #c0392b;
+}

@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+
+{% block title %}Home - Above Status Quo Daylily Auction Group{% endblock %}
+
+{% block content %}
+<!-- Hero Section -->
+<div class="row mb-5">
+    <div class="col-lg-12">
+        <div class="jumbotron bg-light p-5 rounded-lg m-0">
+            <h1 class="display-4 fw-bold">Welcome to the Auction</h1>
+                <p class="lead">Discover and bid on premium daylilies and rare specimens in real-time auctions.</p>
+                <hr class="my-4">
+                <p>Join our community of passionate growers and collectors. Start exploring auctions today!</p>
+
+<!-- Featured Auctions Section -->
+<div class="row mb-5">
+    <div class="col-12">
+        <h2 class="mb-4">Featured Auctions</h2>
+    </div>
+    
+    <!-- Auction Card 1 -->
+    <div class="col-md-6 col-lg-3 mb-4">
+        <div class="card h-100 shadow-sm hover-shadow">
+            <img src="https://via.placeholder.com/300x200" class="card-img-top" alt="Item 1">
+            <div class="card-body">
+                <h5 class="card-title">Auction Item 1</h5>
+                <p class="card-text text-muted">A premium item with excellent condition.</p>
+                <div class="d-flex justify-content-between align-items-center">
+                    <span class="text-primary fw-bold">Current Bid: $150</span>
+                    <span class="badge bg-success">Active</span>
+                </div>
+            </div>
+            <div class="card-footer bg-white">
+                <button class="btn btn-sm btn-primary w-100">Place Bid</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Auction Card 2 -->
+    <div class="col-md-6 col-lg-3 mb-4">
+        <div class="card h-100 shadow-sm hover-shadow">
+            <img src="https://via.placeholder.com/300x200" class="card-img-top" alt="Item 2">
+            <div class="card-body">
+                <h5 class="card-title">Auction Item 2</h5>
+                <p class="card-text text-muted">Limited edition collectible.</p>
+                <div class="d-flex justify-content-between align-items-center">
+                    <span class="text-primary fw-bold">Current Bid: $275</span>
+                    <span class="badge bg-success">Active</span>
+                </div>
+            </div>
+            <div class="card-footer bg-white">
+                <button class="btn btn-sm btn-primary w-100">Place Bid</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Auction Card 3 -->
+    <div class="col-md-6 col-lg-3 mb-4">
+        <div class="card h-100 shadow-sm hover-shadow">
+            <img src="https://via.placeholder.com/300x200" class="card-img-top" alt="Item 3">
+            <div class="card-body">
+                <h5 class="card-title">Auction Item 3</h5>
+                <p class="card-text text-muted">Rare vintage piece.</p>
+                <div class="d-flex justify-content-between align-items-center">
+                    <span class="text-primary fw-bold">Current Bid: $420</span>
+                    <span class="badge bg-warning">Ending Soon</span>
+                </div>
+            </div>
+            <div class="card-footer bg-white">
+                <button class="btn btn-sm btn-primary w-100">Place Bid</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Auction Card 4 -->
+    <div class="col-md-6 col-lg-3 mb-4">
+        <div class="card h-100 shadow-sm hover-shadow">
+            <img src="https://via.placeholder.com/300x200" class="card-img-top" alt="Item 4">
+            <div class="card-body">
+                <h5 class="card-title">Auction Item 4</h5>
+                <p class="card-text text-muted">High-quality merchandise.</p>
+                <div class="d-flex justify-content-between align-items-center">
+                    <span class="text-primary fw-bold">Starting Bid: $99</span>
+                    <span class="badge bg-info">Coming Soon</span>
+                </div>
+            </div>
+            <div class="card-footer bg-white">
+                <button class="btn btn-sm btn-secondary w-100" disabled>Notify Me</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- How It Works Section -->
+<div class="row bg-light p-5 rounded-lg mb-5">
+    <div class="col-12 mb-4">
+        <h2 class="text-center">How It Works</h2>
+    </div>
+    
+    <div class="col-md-4 text-center">
+        <div class="mb-3">
+            <i class="fas fa-search fa-3x text-primary"></i>
+        </div>
+        <h4>Browse</h4>
+        <p>Explore thousands of active auctions and find items you love.</p>
+    </div>
+    
+    <div class="col-md-4 text-center">
+        <div class="mb-3">
+            <i class="fas fa-gavel fa-3x text-primary"></i>
+        </div>
+        <h4>Bid</h4>
+        <p>Place your bids and compete for the items you want.</p>
+    </div>
+    
+    <div class="col-md-4 text-center">
+        <div class="mb-3">
+            <i class="fas fa-check-circle fa-3x text-primary"></i>
+        </div>
+        <h4>Win & Enjoy</h4>
+        <p>Win auctions and receive your items quickly and safely.</p>
+    </div>
+</div>
+{% endblock %}
