@@ -1,0 +1,62 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block content_title %}
+<h1>{% translate "Management Dashboard" %}</h1>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-4 col-12">
+        <div class="small-box bg-info">
+            <div class="inner">
+                <h3>Auctions</h3>
+                <p>Manage auction categories and listings.</p>
+            </div>
+            <div class="icon">
+                <i class="fas fa-gavel"></i>
+            </div>
+            <a href="{% url 'admin:app_list' app_label='auctions' %}" class="small-box-footer">
+                Open app <i class="fas fa-arrow-circle-right"></i>
+            </a>
+        </div>
+    </div>
+    <div class="col-lg-4 col-12">
+        <div class="small-box bg-success">
+            <div class="inner">
+                <h3>Users</h3>
+                <p>Manage user accounts and permissions.</p>
+            </div>
+            <div class="icon">
+                <i class="fas fa-users-cog"></i>
+            </div>
+            <a href="{% url 'admin:auth_user_changelist' %}" class="small-box-footer">
+                Open users <i class="fas fa-arrow-circle-right"></i>
+            </a>
+        </div>
+    </div>
+    <div class="col-lg-4 col-12">
+        <div class="small-box bg-warning">
+            <div class="inner">
+                <h3>Site</h3>
+                <p>Update site-wide settings and domains.</p>
+            </div>
+            <div class="icon">
+                <i class="fas fa-cogs"></i>
+            </div>
+            <a href="{% url 'admin:sites_site_changelist' %}" class="small-box-footer">
+                Open sites <i class="fas fa-arrow-circle-right"></i>
+            </a>
+        </div>
+    </div>
+</div>
+
+<div class="card card-outline card-primary">
+    <div class="card-header">
+        <h3 class="card-title">{% translate "All Applications" %}</h3>
+    </div>
+    <div class="card-body p-0">
+        {% include "admin/app_list.html" with app_list=app_list show_changelinks=True %}
+    </div>
+</div>
+{% endblock %}
