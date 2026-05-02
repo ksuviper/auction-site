@@ -12,6 +12,11 @@
     --text-dark: #2C3E50;
 }
 
+/* Base font size — minimum 16px for accessibility */
+html {
+    font-size: 17px;
+}
+
 /* Header Styling */
 header.bg-light {
     background: linear-gradient(135deg, #E8F4F8 0%, #F5FBFD 100%) !important;
@@ -37,6 +42,10 @@ header p {
 .navbar-dark .nav-link {
     color: #fff !important;
     font-weight: 500;
+    font-size: 1rem;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
     transition: color 0.3s ease;
 }
 
@@ -49,19 +58,31 @@ header p {
     border-bottom: 2px solid var(--gold);
 }
 
-/* Buttons */
+/* Buttons — min 44px height for touch targets */
+.btn {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
 .btn-primary {
     background-color: var(--sky-blue);
     border-color: var(--sky-blue);
     font-weight: 600;
-    transition: all 0.3s ease;
+    transition: all 0.25s ease;
 }
 
-.btn-primary:hover {
+.btn-primary:hover,
+.btn-primary:focus {
     background-color: var(--sky-blue-dark);
     border-color: var(--sky-blue-dark);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(79, 163, 209, 0.3);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(79, 163, 209, 0.35);
+}
+
+.btn-success {
+    font-weight: 600;
 }
 
 .btn-outline-primary {
@@ -89,13 +110,13 @@ header p {
 /* Cards */
 .card {
     border: 1px solid #E0E0E0;
-    transition: all 0.3s ease;
+    transition: all 0.25s ease;
 }
 
 .card:hover {
     border-color: var(--sky-blue);
     box-shadow: 0 8px 24px rgba(79, 163, 209, 0.15);
-    transform: translateY(-4px);
+    transform: translateY(-3px);
 }
 
 .card-title {
@@ -217,4 +238,84 @@ a:hover {
     background-color: #fadbd8;
     border-color: #e74c3c;
     color: #c0392b;
+}
+
+/* ── Sidebar ─────────────────────────────────────────────────────────────── */
+
+.sidebar-category-link {
+    color: var(--dark-navy);
+    transition: background-color 0.2s;
+}
+
+.sidebar-category-link:hover,
+.sidebar-category-link:focus {
+    background-color: rgba(79, 163, 209, 0.12);
+    color: var(--sky-blue-dark);
+}
+
+.sidebar-seller-link {
+    color: var(--text-dark);
+    font-size: 0.95rem;
+    transition: background-color 0.2s;
+}
+
+.sidebar-seller-link:hover,
+.sidebar-seller-link:focus {
+    background-color: rgba(79, 163, 209, 0.12);
+    color: var(--sky-blue-dark);
+}
+
+/* ── Listing cards ───────────────────────────────────────────────────────── */
+
+.listing-card {
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.listing-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 24px rgba(79, 163, 209, 0.2) !important;
+}
+
+/* Consistent image height on all card sizes */
+.listing-card-img {
+    height: 200px;
+    object-fit: cover;
+    width: 100%;
+}
+
+/* ── Listing detail ──────────────────────────────────────────────────────── */
+
+.listing-detail-img {
+    height: 420px;
+    width: 100%;
+    object-fit: cover;
+}
+
+@media (max-width: 767.98px) {
+    .listing-detail-img {
+        height: 260px;
+    }
+}
+
+/* ── Bid form ────────────────────────────────────────────────────────────── */
+
+.bid-commitment-alert {
+    border-left: 5px solid #ffc107;
+    background-color: #fffbea;
+    color: #5a4000;
+    font-size: 1rem;
+    padding: 1rem 1.25rem;
+}
+
+/* ── Breadcrumb ──────────────────────────────────────────────────────────── */
+
+.breadcrumb-item + .breadcrumb-item::before {
+    color: var(--sky-blue);
+}
+
+/* ── Table (bid history) ─────────────────────────────────────────────────── */
+
+.table th {
+    color: var(--dark-navy);
+    font-weight: 700;
 }

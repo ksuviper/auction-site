@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block title %}Weekly Setup — Step 1: Seller{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+
+    <!-- Progress indicator -->
+    <div class="d-flex align-items-center gap-2 mb-4">
+      <span class="badge bg-primary fs-6 px-3 py-2">1</span>
+      <div class="flex-grow-1 border-top"></div>
+      <span class="badge bg-secondary fs-6 px-3 py-2">2 Listings</span>
+      <div class="flex-grow-1 border-top"></div>
+      <span class="badge bg-secondary fs-6 px-3 py-2">3 Done</span>
+    </div>
+
+    <h2 class="mb-1">Weekly Setup</h2>
+    <p class="text-muted mb-4">Step 1 of 3 — Set up the seller for this week's auction.</p>
+
+    <div class="card shadow-sm">
+      <div class="card-body p-4">
+        <form method="post">
+          {% csrf_token %}
+
+          {% if form.non_field_errors %}
+            <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+          {% endif %}
+
+          <!-- Mode selector -->
+          <div class="mb-4">
+            <label class="form-label fw-semibold">Seller type</label>
+            <div class="d-flex gap-4">
+              {% for radio in form.seller_mode %}
+              <div class="form-check">
+                {{ radio.tag }}
+                <label class="form-check-label" for="{{ radio.id_for_label }}">{{ radio.choice_label }}</label>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+
+          <!-- Existing seller selector -->
+          <div id="existing-seller-section">
+            <div class="mb-3">
+              <label for="{{ form.existing_seller.id_for_label }}" class="form-label fw-semibold">
+                Existing seller
+              </label>
+              <select name="{{ form.existing_seller.html_name }}"
+                      id="{{ form.existing_seller.id_for_label }}"
+                      class="form-select{% if form.existing_seller.errors %} is-invalid{% endif %}">
+                <option value="">— select —</option>
+                {% for seller in form.existing_seller.field.queryset %}
+                <option value="{{ seller.pk }}"
+                  {% if form.existing_seller.value == seller.pk|stringformat:"s" %}selected{% endif %}>
+                  {{ seller.name }} ({{ seller.active_week }})
+                </option>
+                {% endfor %}
+              </select>
+              {% if form.existing_seller.errors %}
+                <div class="invalid-feedback">{{ form.existing_seller.errors|join:", " }}</div>
+              {% endif %}
+            </div>
+          </div>
+
+          <!-- New seller fields -->
+          <div id="new-seller-section">
+            <hr class="my-3">
+            <h6 class="text-uppercase text-muted small fw-bold mb-3">Seller details</h6>
+
+            {% for field in form %}
+              {% if field.name not in "seller_mode,existing_seller" %}
+              <div class="mb-3">
+                <label for="{{ field.id_for_label }}" class="form-label fw-semibold">
+                  {{ field.label }}
+                </label>
+                {{ field }}
+                {% if field.errors %}
+                  <div class="invalid-feedback d-block">{{ field.errors|join:", " }}</div>
+                {% endif %}
+                {% if field.help_text %}
+                  <div class="form-text">{{ field.help_text }}</div>
+                {% endif %}
+              </div>
+              {% endif %}
+            {% endfor %}
+          </div>
+
+          <div class="mt-4">
+            <button type="submit" class="btn btn-primary btn-lg">
+              Continue to Listings <i class="fas fa-arrow-right ms-1"></i>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  input[type="text"], input[type="email"], input[type="number"],
+  input[type="date"], textarea, select {
+    display: block; width: 100%; padding: .375rem .75rem;
+    font-size: 1rem; border: 1px solid #dee2e6; border-radius: .375rem;
+  }
+  input[type="radio"] { width: auto; }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  var radios = document.querySelectorAll('[name="seller_mode"]');
+  var existingSection = document.getElementById('existing-seller-section');
+  var newSection = document.getElementById('new-seller-section');
+
+  function update() {
+    var mode = document.querySelector('[name="seller_mode"]:checked');
+    if (!mode) return;
+    var isNew = mode.value === 'new';
+    existingSection.style.display = isNew ? 'none' : '';
+    newSection.style.display = isNew ? '' : 'none';
+  }
+
+  radios.forEach(function(r) { r.addEventListener('change', update); });
+  update();
+})();
+</script>
+{% endblock %}

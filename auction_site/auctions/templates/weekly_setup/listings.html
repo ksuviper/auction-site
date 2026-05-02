@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+
+{% block title %}Weekly Setup — Step 2: Listings{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-xl-11">
+
+    <!-- Progress indicator -->
+    <div class="d-flex align-items-center gap-2 mb-4">
+      <span class="badge bg-success fs-6 px-3 py-2"><i class="fas fa-check"></i> Seller</span>
+      <div class="flex-grow-1 border-top"></div>
+      <span class="badge bg-primary fs-6 px-3 py-2">2</span>
+      <div class="flex-grow-1 border-top"></div>
+      <span class="badge bg-secondary fs-6 px-3 py-2">3 Done</span>
+    </div>
+
+    <div class="d-flex align-items-center justify-content-between mb-1">
+      <h2 class="mb-0">Bulk Upload Listings</h2>
+      <a href="{% url 'weekly_setup' %}" class="btn btn-outline-secondary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i>Change Seller
+      </a>
+    </div>
+    <p class="text-muted mb-4">
+      Seller: <strong>{{ seller.name }}</strong> &nbsp;·&nbsp;
+      Category: <strong>{{ seller.category.name }}</strong> &nbsp;·&nbsp;
+      Week of: <strong>{{ seller.active_week }}</strong>
+    </p>
+
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      {{ formset.management_form }}
+
+      {% if formset.non_form_errors %}
+        <div class="alert alert-danger">{{ formset.non_form_errors }}</div>
+      {% endif %}
+
+      <div class="card shadow-sm mb-3">
+        <div class="table-responsive">
+          <table class="table table-bordered align-middle mb-0" id="listing-table">
+            <thead class="table-dark">
+              <tr>
+                <th style="width:32px;">#</th>
+                <th>Title <span class="text-danger">*</span></th>
+                <th style="min-width:220px;">Description</th>
+                <th style="width:110px;">Start Price <span class="text-danger">*</span></th>
+                <th style="width:110px;">Reserve</th>
+                <th style="width:170px;">Starts At <span class="text-danger">*</span></th>
+                <th style="width:170px;">Ends At <span class="text-danger">*</span></th>
+                <th style="width:160px;">Image</th>
+                <th style="width:48px;">Del</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for form in formset %}
+              <tr class="listing-row{% if form.errors %} table-danger{% endif %}">
+                <td class="text-muted small text-center">{{ forloop.counter }}</td>
+                <td>
+                  {{ form.title }}
+                  {% if form.title.errors %}<div class="text-danger small">{{ form.title.errors|join:", " }}</div>{% endif %}
+                </td>
+                <td>
+                  {{ form.description }}
+                  {% if form.description.errors %}<div class="text-danger small">{{ form.description.errors|join:", " }}</div>{% endif %}
+                </td>
+                <td>
+                  {{ form.start_price }}
+                  {% if form.start_price.errors %}<div class="text-danger small">{{ form.start_price.errors|join:", " }}</div>{% endif %}
+                </td>
+                <td>
+                  {{ form.reserve_price }}
+                  {% if form.reserve_price.errors %}<div class="text-danger small">{{ form.reserve_price.errors|join:", " }}</div>{% endif %}
+                </td>
+                <td>
+                  {{ form.starts_at }}
+                  {% if form.starts_at.errors %}<div class="text-danger small">{{ form.starts_at.errors|join:", " }}</div>{% endif %}
+                </td>
+                <td>
+                  {{ form.ends_at }}
+                  {% if form.ends_at.errors %}<div class="text-danger small">{{ form.ends_at.errors|join:", " }}</div>{% endif %}
+                </td>
+                <td>
+                  {{ form.image }}
+                  {% if form.image.errors %}<div class="text-danger small">{{ form.image.errors|join:", " }}</div>{% endif %}
+                </td>
+                <td class="text-center">
+                  {% if form.DELETE %}
+                    {{ form.DELETE }}
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="d-flex align-items-center justify-content-between mb-4">
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="add-row">
+          <i class="fas fa-plus me-1"></i>Add another row
+        </button>
+        <p class="text-muted small mb-0">
+          <span class="text-danger">*</span> Required fields. Blank rows are ignored.
+        </p>
+      </div>
+
+      <button type="submit" class="btn btn-success btn-lg">
+        <i class="fas fa-upload me-1"></i>Save All Listings
+      </button>
+    </form>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  #listing-table input[type="text"],
+  #listing-table input[type="number"],
+  #listing-table input[type="datetime-local"],
+  #listing-table textarea {
+    width: 100%; padding: .25rem .4rem; font-size: .875rem;
+    border: 1px solid #dee2e6; border-radius: .25rem;
+  }
+  #listing-table input[type="checkbox"] { width: auto; }
+  #listing-table input[type="file"] { font-size: .8rem; }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// "Add another row" clones the last empty row and increments form indices.
+(function () {
+  var addBtn = document.getElementById('add-row');
+  var totalInput = document.querySelector('[name="listings-TOTAL_FORMS"]');
+
+  addBtn.addEventListener('click', function () {
+    var tbody = document.querySelector('#listing-table tbody');
+    var rows = tbody.querySelectorAll('tr.listing-row');
+    var lastRow = rows[rows.length - 1];
+    var newRow = lastRow.cloneNode(true);
+    var newIndex = parseInt(totalInput.value, 10);
+
+    // Update all name/id/for attributes with the new index.
+    newRow.querySelectorAll('[name],[id],[for]').forEach(function (el) {
+      ['name', 'id', 'htmlFor'].forEach(function (attr) {
+        if (el[attr]) {
+          el[attr] = el[attr].replace(/listings-\d+/, 'listings-' + newIndex);
+        }
+      });
+    });
+
+    // Clear values.
+    newRow.querySelectorAll('input[type="text"], input[type="number"], input[type="datetime-local"], textarea').forEach(function (el) {
+      el.value = '';
+    });
+    newRow.querySelectorAll('input[type="checkbox"]').forEach(function (el) {
+      el.checked = false;
+    });
+    newRow.querySelectorAll('input[type="file"]').forEach(function (el) {
+      el.value = '';
+    });
+    newRow.classList.remove('table-danger');
+
+    // Update row number display.
+    var numCell = newRow.querySelector('td:first-child');
+    if (numCell) numCell.textContent = newIndex + 1;
+
+    tbody.appendChild(newRow);
+    totalInput.value = newIndex + 1;
+  });
+})();
+</script>
+{% endblock %}

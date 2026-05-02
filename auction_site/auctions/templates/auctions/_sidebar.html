@@ -1,0 +1,24 @@
+{% for item in sidebar_data %}
+<div class="mb-2">
+  <a href="{% url 'category_listings' slug=item.category.slug %}"
+     class="sidebar-category-link d-flex align-items-center text-decoration-none py-2 px-3 rounded fw-semibold fs-5">
+    <i class="fas fa-leaf me-2 text-success"></i>{{ item.category.name }}
+  </a>
+  {% if item.sellers %}
+  <ul class="list-unstyled ms-4 mt-1 mb-2">
+    {% for seller in item.sellers %}
+    <li>
+      <a href="{% url 'seller_listings' pk=seller.pk %}"
+         class="sidebar-seller-link d-block py-1 px-2 rounded text-decoration-none">
+        <i class="fas fa-store me-1 small"></i>{{ seller.name }}
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-muted ms-4 mb-2" style="font-size:0.9rem;">No sellers this week</p>
+  {% endif %}
+</div>
+{% empty %}
+<p class="text-muted px-3">No categories available.</p>
+{% endfor %}

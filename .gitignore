@@ -5,3 +5,7 @@ docs/SOW.docx
 .env
 .env.local
 .env.*.local
+
+# Uploaded media — keep the folder structure but not the files
+media/listings/*
+!media/listings/.gitkeep

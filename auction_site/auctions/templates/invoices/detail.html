@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block title %}Invoice #{{ invoice.pk }} — ASQ Daylily Auctions{% endblock %}
+
+{% block extra_css %}
+<style>
+@media print {
+    nav, footer, .no-print { display: none !important; }
+    main { margin: 0 !important; }
+    .card { border: none !important; box-shadow: none !important; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-7">
+        <div class="d-flex align-items-center justify-content-between mb-4 no-print">
+            <a href="javascript:history.back()" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-arrow-left me-1"></i>Back
+            </a>
+            <button onclick="window.print()" class="btn btn-outline-dark btn-sm">
+                <i class="fas fa-print me-1"></i>Print
+            </button>
+        </div>
+
+        <div class="card shadow-sm">
+            <div class="card-header bg-dark text-white text-center py-3">
+                <h4 class="mb-0">ASQ Daylily Auctions</h4>
+                <p class="mb-0 small text-white-50">Above Status Quo Daylily Auction Group</p>
+            </div>
+            <div class="card-body p-4">
+                <div class="d-flex justify-content-between align-items-start mb-4">
+                    <div>
+                        <h5 class="mb-1">Invoice #{{ invoice.pk }}</h5>
+                        <p class="text-muted mb-0 small">{{ invoice.created_at|date:"F j, Y" }}</p>
+                    </div>
+                    {% if invoice.is_sent %}
+                        <span class="badge bg-success fs-6">Sent</span>
+                    {% else %}
+                        <span class="badge bg-warning text-dark fs-6">Pending</span>
+                    {% endif %}
+                </div>
+
+                <hr>
+
+                <div class="row mb-4">
+                    <div class="col-sm-6 mb-3 mb-sm-0">
+                        <h6 class="text-uppercase text-muted small fw-bold">Bill To</h6>
+                        <p class="mb-0 fw-semibold">{{ invoice.buyer.get_full_name|default:invoice.buyer.username }}</p>
+                        {% if invoice.buyer.email %}
+                            <p class="mb-0 small text-muted">{{ invoice.buyer.email }}</p>
+                        {% endif %}
+                    </div>
+                    <div class="col-sm-6">
+                        <h6 class="text-uppercase text-muted small fw-bold">Seller</h6>
+                        <p class="mb-0 fw-semibold">{{ invoice.seller.name }}</p>
+                        {% if invoice.seller.email %}
+                            <p class="mb-0 small text-muted">{{ invoice.seller.email }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <table class="table table-bordered mb-4">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Item</th>
+                            <th class="text-end">Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>{{ invoice.item_display }}</td>
+                            <td class="text-end">${{ invoice.amount }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">Shipping</td>
+                            <td class="text-end">${{ invoice.shipping_fee }}</td>
+                        </tr>
+                    </tbody>
+                    <tfoot class="table-light">
+                        <tr>
+                            <th>Total</th>
+                            <th class="text-end fs-5">${{ invoice.total }}</th>
+                        </tr>
+                    </tfoot>
+                </table>
+
+                {% if invoice.payment_method or invoice.seller.accepted_payment_methods %}
+                <div class="mb-4">
+                    <h6 class="text-uppercase text-muted small fw-bold">Payment</h6>
+                    {% if invoice.payment_method %}
+                        <p class="mb-0">Method: <strong>{{ invoice.payment_method }}</strong></p>
+                    {% else %}
+                        <p class="mb-0 text-muted">
+                            Accepted: {{ invoice.seller.accepted_payment_methods }}
+                        </p>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                {% if invoice.notes %}
+                <div class="mb-4">
+                    <h6 class="text-uppercase text-muted small fw-bold">Notes</h6>
+                    <p class="mb-0">{{ invoice.notes }}</p>
+                </div>
+                {% endif %}
+
+                <hr>
+                <p class="text-center text-muted small mb-0">
+                    Thank you for participating in ASQ Daylily Auctions!
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
