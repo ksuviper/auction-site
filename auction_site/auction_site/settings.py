@@ -51,7 +51,11 @@ INSTALLED_APPS = [
     'allauth',
     'allauth.account',
     'allauth.socialaccount',
+    'allauth.socialaccount.providers.google',
+    'allauth.socialaccount.providers.facebook',
+    'allauth.socialaccount.providers.microsoft',
     'allauth.mfa',
+    'django_apscheduler',
 
     # Local apps
     'auctions.apps.AuctionsConfig',
@@ -82,6 +86,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'auction_site.context_processors.sidebar',
             ],
         },
     },
@@ -141,6 +146,9 @@ STATICFILES_DIRS = [
     BASE_DIR / 'auction_site' / 'static',
 ]
 
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -153,8 +161,9 @@ AUTHENTICATION_BACKENDS = [
     'allauth.account.auth_backends.AuthenticationBackend',
 ]
 
-# Account settings
-ACCOUNT_SIGNUP_FIELDS = ['email', 'username']
+# Account settings — email-only login, no username required at signup
+ACCOUNT_LOGIN_METHODS = {'email'}
+ACCOUNT_SIGNUP_FIELDS = ['email*', 'password1*', 'password2*']
 ACCOUNT_SESSION_REMEMBER = True
 ACCOUNT_EMAIL_VERIFICATION = 'optional'
 
@@ -163,8 +172,36 @@ MFA_SUPPORTED_AUTH_FORMS = [
     'allauth.mfa.totp.forms.ActivateTOTPForm',
 ]
 
-# Enable email OTP (one-time passwords sent via email)
-ACCOUNT_EMAIL_VERIFICATION = 'optional'
+# Social account settings
+SOCIALACCOUNT_AUTO_SIGNUP = True
+SOCIALACCOUNT_EMAIL_REQUIRED = True
+SOCIALACCOUNT_EMAIL_VERIFICATION = 'none'  # provider has already verified the email
+
+SOCIALACCOUNT_PROVIDERS = {
+    'google': {
+        'APP': {
+            'client_id': os.getenv('GOOGLE_CLIENT_ID', ''),
+            'secret': os.getenv('GOOGLE_CLIENT_SECRET', ''),
+        },
+        'SCOPE': ['profile', 'email'],
+        'AUTH_PARAMS': {'access_type': 'online'},
+    },
+    'facebook': {
+        'APP': {
+            'client_id': os.getenv('FACEBOOK_APP_ID', ''),
+            'secret': os.getenv('FACEBOOK_APP_SECRET', ''),
+        },
+        'METHOD': 'oauth2',
+        'SCOPE': ['email', 'public_profile'],
+    },
+    'microsoft': {
+        'APP': {
+            'client_id': os.getenv('MICROSOFT_CLIENT_ID', ''),
+            'secret': os.getenv('MICROSOFT_CLIENT_SECRET', ''),
+        },
+        'TENANT': 'common',
+    },
+}
 
 # Email backend (for development - using console backend)
 # Override in .env with: EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
@@ -179,6 +216,10 @@ if EMAIL_BACKEND == 'django.core.mail.backends.smtp.EmailBackend':
     EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
     DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER)
 
+# Admin / notification email
+ADMIN_EMAIL = os.getenv('ADMIN_EMAIL', '')
+
 # Redirect URLs
 LOGIN_REDIRECT_URL = '/'
 ACCOUNT_LOGOUT_REDIRECT_URL = '/'
+ACCOUNT_ADAPTER = 'auctions.adapters.AccountAdapter'

@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}Weekly Setup — Done{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+
+    <!-- Progress indicator -->
+    <div class="d-flex align-items-center gap-2 mb-4">
+      <span class="badge bg-success fs-6 px-3 py-2"><i class="fas fa-check"></i> Seller</span>
+      <div class="flex-grow-1 border-top"></div>
+      <span class="badge bg-success fs-6 px-3 py-2"><i class="fas fa-check"></i> Listings</span>
+      <div class="flex-grow-1 border-top"></div>
+      <span class="badge bg-primary fs-6 px-3 py-2">3</span>
+    </div>
+
+    <div class="text-center mb-4">
+      <i class="fas fa-check-circle text-success" style="font-size:3rem;"></i>
+      <h2 class="mt-3 mb-1">Week set up successfully!</h2>
+      <p class="text-muted">
+        <strong>{{ seller.name }}</strong> —
+        {{ listings|length }} listing{{ listings|length|pluralize }} created.
+      </p>
+    </div>
+
+    {% if listings %}
+    <div class="card shadow-sm mb-4">
+      <div class="card-header bg-light fw-semibold">Created listings</div>
+      <ul class="list-group list-group-flush">
+        {% for listing in listings %}
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <span>
+            <a href="{% url 'listing_detail' listing.pk %}">{{ listing.title }}</a>
+          </span>
+          <span class="text-muted small">
+            ${{ listing.start_price }} &nbsp;·&nbsp;
+            {{ listing.starts_at|date:"M j, g:i a" }} – {{ listing.ends_at|date:"M j, g:i a" }}
+          </span>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <div class="d-flex flex-wrap gap-2 justify-content-center">
+      <a href="{% url 'weekly_setup' %}" class="btn btn-outline-primary">
+        <i class="fas fa-plus me-1"></i>Set Up Another Week
+      </a>
+      <a href="{% url 'weekly_setup_listings' seller.pk %}" class="btn btn-outline-secondary">
+        <i class="fas fa-upload me-1"></i>Add More Listings
+      </a>
+      <a href="{% url 'invoice_dashboard' %}" class="btn btn-outline-dark">
+        <i class="fas fa-file-invoice-dollar me-1"></i>Invoice Dashboard
+      </a>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

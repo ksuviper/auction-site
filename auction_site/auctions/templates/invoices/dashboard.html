@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}Invoice Dashboard — ASQ Daylily Auctions{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+    <h2 class="mb-0"><i class="fas fa-file-invoice-dollar me-2"></i>Invoice Dashboard</h2>
+    <a href="{% url 'invoice_create' %}" class="btn btn-success">
+        <i class="fas fa-plus me-1"></i>New Invoice
+    </a>
+</div>
+
+<form method="post">
+    {% csrf_token %}
+    <div class="mb-3 d-flex gap-2">
+        <button type="submit" name="action" value="mark_sent" class="btn btn-primary btn-sm">
+            <i class="fas fa-check me-1"></i>Mark Selected as Sent
+        </button>
+        <button type="submit" name="action" value="mark_unsent" class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-undo me-1"></i>Mark Selected as Unsent
+        </button>
+    </div>
+
+    {% if groups %}
+        {% for group in groups %}
+        <div class="card mb-4 shadow-sm">
+            <div class="card-header bg-dark text-white d-flex align-items-center justify-content-between">
+                <h5 class="mb-0">{{ group.seller.name }}</h5>
+                <span class="badge bg-secondary">{{ group.invoices|length }} invoice{{ group.invoices|length|pluralize }}</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width:40px;">
+                                <input type="checkbox" class="form-check-input select-all"
+                                       data-group="{{ forloop.counter }}">
+                            </th>
+                            <th>#</th>
+                            <th>Item</th>
+                            <th>Buyer</th>
+                            <th class="text-end">Amount</th>
+                            <th class="text-end">Shipping</th>
+                            <th class="text-end">Total</th>
+                            <th>Payment</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for invoice in group.invoices %}
+                        <tr class="{% if invoice.is_sent %}table-success{% endif %}">
+                            <td>
+                                <input type="checkbox" class="form-check-input group-{{ forloop.parentloop.counter }}"
+                                       name="selected_invoices" value="{{ invoice.pk }}">
+                            </td>
+                            <td>{{ invoice.pk }}</td>
+                            <td>
+                                {{ invoice.item_display }}
+                                {% if invoice.is_manually_created %}
+                                    <span class="badge bg-info text-dark ms-1">Manual</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ invoice.buyer.username }}</td>
+                            <td class="text-end">${{ invoice.amount }}</td>
+                            <td class="text-end">${{ invoice.shipping_fee }}</td>
+                            <td class="text-end fw-bold">${{ invoice.total }}</td>
+                            <td>{{ invoice.payment_method|default:"—" }}</td>
+                            <td>
+                                {% if invoice.is_sent %}
+                                    <span class="badge bg-success">Sent</span>
+                                {% else %}
+                                    <span class="badge bg-warning text-dark">Pending</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-nowrap">{{ invoice.created_at|date:"M j, Y" }}</td>
+                            <td class="text-nowrap">
+                                <a href="{% url 'invoice_edit' invoice.pk %}" class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                                <a href="{% url 'invoice_detail' invoice.pk %}" class="btn btn-sm btn-outline-secondary" target="_blank">
+                                    <i class="fas fa-print"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="alert alert-info">No invoices found.</div>
+    {% endif %}
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.querySelectorAll('.select-all').forEach(function(cb) {
+    cb.addEventListener('change', function() {
+        var group = this.dataset.group;
+        document.querySelectorAll('.group-' + group).forEach(function(c) {
+            c.checked = cb.checked;
+        });
+    });
+});
+</script>
+{% endblock %}
