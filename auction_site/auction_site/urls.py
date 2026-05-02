@@ -17,15 +17,22 @@ Including another URLconf
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
+from django.contrib.staticfiles.views import serve as serve_static
 from django.urls import include, path
+from django.views.generic import RedirectView, TemplateView
 
 from . import views
 
 urlpatterns = [
     path('', views.index, name='home'),
+    path('robots.txt', TemplateView.as_view(template_name='robots.txt', content_type='text/plain')),
+    path('favicon.ico', RedirectView.as_view(url=settings.STATIC_URL + 'favicon.ico', permanent=True)),
     path('admin/invoices/', include('auctions.invoice_urls')),
     path('admin/weekly-setup/', include('auctions.weekly_setup_urls')),
+    path('admin/reports/', include('auctions.reports_urls')),
     path('admin/', admin.site.urls),
+    # Rate-limited login must come before include('allauth.urls') so it matches first.
+    path('accounts/login/', views.RateLimitedLoginView.as_view(), name='account_login'),
     path('accounts/', include('allauth.urls')),
     path('', include('auctions.urls')),
 ]

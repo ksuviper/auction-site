@@ -26,12 +26,13 @@
   <!-- Left: photo + description -->
   <div class="col-lg-7">
     {% if listing.image %}
-    <img src="{{ listing.image.url }}" alt="{{ listing.title }}"
+    <img src="{{ listing.image.url }}" alt="{{ listing.title }} — daylily photo"
          class="listing-detail-img rounded shadow-sm mb-4">
     {% else %}
     <div class="listing-detail-img d-flex align-items-center justify-content-center
-                bg-light rounded shadow-sm mb-4">
-      <i class="fas fa-seedling fa-5x text-muted"></i>
+                bg-light rounded shadow-sm mb-4"
+         role="img" aria-label="No photo available for {{ listing.title }}">
+      <i class="fas fa-seedling fa-5x text-muted" aria-hidden="true"></i>
     </div>
     {% endif %}
 
@@ -126,8 +127,11 @@
         </p>
         <form method="post" action="{% url 'place_bid' pk=listing.pk %}" novalidate>
           {% csrf_token %}
+          <label for="{{ bid_form.amount.id_for_label }}" class="form-label fw-semibold">
+            Your bid amount (USD)
+          </label>
           <div class="input-group input-group-lg mb-3">
-            <span class="input-group-text fs-5 fw-bold">$</span>
+            <span class="input-group-text fs-5 fw-bold" aria-hidden="true">$</span>
             {{ bid_form.amount }}
           </div>
           {% if bid_form.amount.errors %}

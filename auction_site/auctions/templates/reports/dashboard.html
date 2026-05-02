@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+
+{% block title %}Reports — ASQ Daylily Auctions{% endblock %}
+
+{% block extra_css %}
+<style>
+  .stat-card { border-left: 4px solid; }
+  .stat-card.green  { border-color: #198754; }
+  .stat-card.blue   { border-color: #0d6efd; }
+  .stat-number { font-size: 2rem; font-weight: 700; line-height: 1.1; }
+  .section-title {
+    font-size: .7rem; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; color: #6c757d; margin-bottom: .75rem;
+  }
+  .chart-wrap { position: relative; height: 260px; }
+  table th { white-space: nowrap; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <h2 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Reports</h2>
+  <a href="{% url 'reports_export_csv' %}" class="btn btn-success">
+    <i class="fas fa-download me-1"></i>Download CSV
+  </a>
+</div>
+
+<!-- ── Summary cards ─────────────────────────────────────────────────────── -->
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-lg-3">
+    <div class="card stat-card green h-100 shadow-sm">
+      <div class="card-body">
+        <div class="section-title">Plants Sold (all time)</div>
+        <div class="stat-number text-success">{{ total_sold }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card stat-card blue h-100 shadow-sm">
+      <div class="card-body">
+        <div class="section-title">Revenue (all time)</div>
+        <div class="stat-number text-primary">${{ total_revenue|floatformat:2 }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Monthly revenue chart ─────────────────────────────────────────────── -->
+<div class="card shadow-sm mb-4">
+  <div class="card-header bg-dark text-white fw-semibold">
+    Monthly Revenue — {{ current_year }}
+  </div>
+  <div class="card-body">
+    <div class="chart-wrap">
+      <canvas id="monthlyChart"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- ── By year ───────────────────────────────────────────────────────────── -->
+<div class="card shadow-sm mb-4">
+  <div class="card-header bg-light fw-semibold">By Year</div>
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Year</th>
+          <th class="text-end">Plants Sold</th>
+          <th class="text-end">Revenue</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in by_year %}
+        <tr>
+          <td><strong>{{ row.year }}</strong></td>
+          <td class="text-end">{{ row.sold }}</td>
+          <td class="text-end">${{ row.revenue|floatformat:2 }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="3" class="text-muted text-center py-3">No data yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ── By seller ─────────────────────────────────────────────────────────── -->
+<div class="card shadow-sm mb-4">
+  <div class="card-header bg-light fw-semibold">By Seller</div>
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Seller</th>
+          <th class="text-end">Invoices</th>
+          <th class="text-end">Total Revenue</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in by_seller %}
+        <tr>
+          <td>{{ row.seller__name }}</td>
+          <td class="text-end">{{ row.count }}</td>
+          <td class="text-end">${{ row.total|floatformat:2 }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="3" class="text-muted text-center py-3">No data yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ── By category ───────────────────────────────────────────────────────── -->
+<div class="card shadow-sm mb-4">
+  <div class="card-header bg-light fw-semibold">By Category</div>
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Category</th>
+          <th class="text-end">Plants Sold</th>
+          <th class="text-end">Revenue</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in by_category %}
+        <tr>
+          <td>{{ row.category__name }}</td>
+          <td class="text-end">{{ row.count }}</td>
+          <td class="text-end">${{ row.revenue|floatformat:2 }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="3" class="text-muted text-center py-3">No data yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+  var monthly = {{ monthly_revenue_json }};
+  var labels = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  new Chart(document.getElementById('monthlyChart'), {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Revenue ($)',
+        data: monthly,
+        backgroundColor: 'rgba(13, 110, 253, 0.7)',
+        borderColor: 'rgba(13, 110, 253, 1)',
+        borderWidth: 1,
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) {
+              return ' $' + ctx.parsed.y.toFixed(2);
+            }
+          }
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: {
+            callback: function(v) { return '$' + v; }
+          }
+        }
+      }
+    }
+  });
+})();
+</script>
+{% endblock %}

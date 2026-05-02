@@ -1,11 +1,14 @@
 <div class="col">
   <div class="card h-100 shadow-sm listing-card">
-    <a href="{% url 'listing_detail' pk=listing.pk %}" class="text-decoration-none" tabindex="-1" aria-hidden="true">
+    <a href="{% url 'listing_detail' pk=listing.pk %}" tabindex="-1" aria-hidden="true">
       {% if listing.image %}
-      <img src="{{ listing.image.url }}" class="card-img-top listing-card-img" alt="{{ listing.title }}">
+      <img src="{{ listing.image.url }}"
+           class="card-img-top listing-card-img"
+           alt="{{ listing.title }} — daylily photo">
       {% else %}
-      <div class="card-img-top listing-card-img d-flex align-items-center justify-content-center bg-light">
-        <i class="fas fa-seedling fa-3x text-muted"></i>
+      <div class="card-img-top listing-card-img d-flex align-items-center justify-content-center bg-light"
+           role="img" aria-label="No photo available for {{ listing.title }}">
+        <i class="fas fa-seedling fa-3x text-muted" aria-hidden="true"></i>
       </div>
       {% endif %}
     </a>
@@ -17,7 +20,7 @@
       </h3>
       {% if listing.seller %}
       <p class="text-muted mb-2" style="font-size:0.9rem;">
-        <i class="fas fa-store me-1"></i>{{ listing.seller.name }}
+        <i class="fas fa-store me-1" aria-hidden="true"></i>{{ listing.seller.name }}
       </p>
       {% endif %}
       <div class="mt-auto">
@@ -33,14 +36,15 @@
         </div>
         {% endif %}
         <p class="text-muted mb-0" style="font-size:0.85rem;">
-          <i class="fas fa-clock me-1"></i>Ends {{ listing.ends_at|date:"M j, Y g:i A" }}
+          <i class="fas fa-clock me-1" aria-hidden="true"></i>Ends {{ listing.ends_at|date:"M j, Y g:i A" }}
         </p>
       </div>
     </div>
     <div class="card-footer bg-white border-0 pt-0 pb-3 px-3">
       <a href="{% url 'listing_detail' pk=listing.pk %}"
-         class="btn btn-primary w-100 btn-lg fw-semibold">
-        <i class="fas fa-gavel me-2"></i>View &amp; Bid
+         class="btn btn-primary w-100 btn-lg fw-semibold"
+         aria-label="View and bid on {{ listing.title }}">
+        <i class="fas fa-gavel me-2" aria-hidden="true"></i>View &amp; Bid
       </a>
     </div>
   </div>

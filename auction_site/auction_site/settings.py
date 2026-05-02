@@ -28,9 +28,10 @@ load_dotenv(BASE_DIR.parent / '.env')
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-development-key-change-in-production')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DEBUG', 'True') == 'True'
+DEBUG = os.getenv('DEBUG', 'False') == 'True'
 
 # Parse ALLOWED_HOSTS from environment (comma-separated)
+# In production set ALLOWED_HOSTS=yourdomain.com in the environment.
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
 
@@ -151,6 +152,35 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# ============================================================================
+# Security hardening
+# ============================================================================
+
+# Prevent browsers from MIME-sniffing a response away from the declared content-type.
+SECURE_CONTENT_TYPE_NOSNIFF = True
+
+# Deny all framing to prevent clickjacking.
+X_FRAME_OPTIONS = 'DENY'
+
+# Secure cookies — only sent over HTTPS.  Automatically off in local dev (DEBUG=True).
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+
+# HSTS — off by default; set SECURE_HSTS_SECONDS=31536000 in production once HTTPS is confirmed.
+SECURE_HSTS_SECONDS = int(os.getenv('SECURE_HSTS_SECONDS', '0'))
+SECURE_HSTS_INCLUDE_SUBDOMAINS = os.getenv('SECURE_HSTS_INCLUDE_SUBDOMAINS', 'False') == 'True'
+SECURE_HSTS_PRELOAD = os.getenv('SECURE_HSTS_PRELOAD', 'False') == 'True'
+
+# Redirect all HTTP to HTTPS in production — set SECURE_SSL_REDIRECT=True in env.
+SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'False') == 'True'
+
+# Tell Django it's behind an HTTPS reverse proxy (nginx) in production.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# Silence deployment checks that are intentionally controlled via environment variables.
+# W004 (HSTS) and W008 (SSL redirect) are opt-in; see SECURITY.md for production setup.
+SILENCED_SYSTEM_CHECKS = ['security.W004', 'security.W008']
 
 # ============================================================================
 # Django AllAuth Configuration

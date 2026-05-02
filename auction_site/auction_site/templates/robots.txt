@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /admin/invoices/
+Disallow: /admin/weekly-setup/
+Disallow: /admin/reports/
+Disallow: /accounts/
+
+Sitemap: https://{{ request.get_host }}/sitemap.xml

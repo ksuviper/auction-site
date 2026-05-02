@@ -5,8 +5,10 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
 from django.utils import timezone
+from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.generic import DetailView, ListView, UpdateView
+from django_ratelimit.decorators import ratelimit
 
 from .forms import BidForm, ProfileUpdateForm
 from .models import AuctionCategory, AuctionListing, Bid, Seller, UserProfile
@@ -117,9 +119,16 @@ class ListingDetailView(DetailView):
 
 # ── Bid submission ────────────────────────────────────────────────────────────
 
+@method_decorator(
+    ratelimit(key='user', rate='10/m', method='POST', block=False),
+    name='post',
+)
 class PlaceBidView(LoginRequiredMixin, View):
 
     def post(self, request, pk):
+        if getattr(request, 'limited', False):
+            messages.error(request, 'You are placing bids too quickly. Please wait a moment.')
+            return redirect('listing_detail', pk=pk)
         listing = get_object_or_404(AuctionListing, pk=pk)
         now = timezone.now()
 
