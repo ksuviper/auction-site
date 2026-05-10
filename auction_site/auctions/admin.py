@@ -1,5 +1,6 @@
 from django.contrib import admin
 from django.utils.html import mark_safe
+from unfold.admin import ModelAdmin
 
 from .models import (
     AuctionCategory,
@@ -31,7 +32,7 @@ admin.site.index_title = 'Management Dashboard'
 
 
 @admin.register(AuctionCategory)
-class AuctionCategoryAdmin(admin.ModelAdmin):
+class AuctionCategoryAdmin(ModelAdmin):
     list_display = ('name', 'slug', 'is_active')
     list_filter = ('is_active',)
     search_fields = ('name',)
@@ -39,14 +40,14 @@ class AuctionCategoryAdmin(admin.ModelAdmin):
 
 
 @admin.register(UserProfile)
-class UserProfileAdmin(admin.ModelAdmin):
+class UserProfileAdmin(ModelAdmin):
     list_display = ('user', 'phone_number')
     search_fields = ('user__username', 'user__email', 'phone_number')
     raw_id_fields = ('user',)
 
 
 @admin.register(Seller)
-class SellerAdmin(admin.ModelAdmin):
+class SellerAdmin(ModelAdmin):
     list_display = ('name', 'email', 'category', 'active_week', 'shipping_fee', 'accepted_payment_methods')
     list_filter = ('category', 'active_week')
     search_fields = ('name', 'email', 'bio')
@@ -54,7 +55,7 @@ class SellerAdmin(admin.ModelAdmin):
 
 
 @admin.register(AuctionListing)
-class AuctionListingAdmin(admin.ModelAdmin):
+class AuctionListingAdmin(ModelAdmin):
     actions = [duplicate_listings]
     list_display = (
         'image_preview',
@@ -87,7 +88,7 @@ class AuctionListingAdmin(admin.ModelAdmin):
 
 
 @admin.register(Bid)
-class BidAdmin(admin.ModelAdmin):
+class BidAdmin(ModelAdmin):
     list_display = ('listing', 'bidder', 'amount', 'placed_at')
     list_filter = ('placed_at',)
     search_fields = ('listing__title', 'bidder__username')
@@ -96,7 +97,7 @@ class BidAdmin(admin.ModelAdmin):
 
 
 @admin.register(Invoice)
-class InvoiceAdmin(admin.ModelAdmin):
+class InvoiceAdmin(ModelAdmin):
     list_display = (
         'pk',
         'item_display',
@@ -116,7 +117,7 @@ class InvoiceAdmin(admin.ModelAdmin):
 
 
 @admin.register(Wishlist)
-class WishlistAdmin(admin.ModelAdmin):
+class WishlistAdmin(ModelAdmin):
     list_display = ('user', 'listing_title_keyword', 'notified')
     list_filter = ('notified',)
     search_fields = ('user__username', 'listing_title_keyword')

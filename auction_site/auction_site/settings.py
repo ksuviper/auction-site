@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 
 import os
 from pathlib import Path
+from django.urls import reverse_lazy
 from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -38,6 +39,10 @@ ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 # Application definition
 
 INSTALLED_APPS = [
+    'unfold',
+    'unfold.contrib.filters',
+    'unfold.contrib.forms',
+    'unfold.contrib.inlines',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -198,6 +203,117 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 # Silence deployment checks that are intentionally controlled via environment variables.
 # W004 (HSTS) and W008 (SSL redirect) are opt-in; see SECURITY.md for production setup.
 SILENCED_SYSTEM_CHECKS = ['security.W004', 'security.W008']
+
+# ============================================================================
+# Unfold Admin Configuration
+# ============================================================================
+
+UNFOLD = {
+    "SITE_TITLE": "ASQ Daylily Auctions",
+    "SITE_HEADER": "ASQ Daylily Auctions Admin",
+    "SITE_SYMBOL": "storefront",
+    "SHOW_HISTORY": True,
+    "SHOW_VIEW_ON_SITE": True,
+    "COLORS": {
+        "primary": {
+            "50": "240 249 255",
+            "100": "224 242 254",
+            "200": "186 230 253",
+            "300": "125 211 252",
+            "400": "56 189 248",
+            "500": "79 163 209",
+            "600": "44 90 123",
+            "700": "26 58 82",
+            "800": "12 74 110",
+            "900": "8 47 73",
+            "950": "8 47 73",
+        },
+    },
+    "SIDEBAR": {
+        "show_search": True,
+        "show_all_applications": False,
+        "navigation": [
+            {
+                "title": "Auctions",
+                "separator": False,
+                "collapsible": False,
+                "items": [
+                    {
+                        "title": "Listings",
+                        "icon": "gavel",
+                        "link": reverse_lazy("admin:auctions_auctionlisting_changelist"),
+                    },
+                    {
+                        "title": "Categories",
+                        "icon": "category",
+                        "link": reverse_lazy("admin:auctions_auctioncategory_changelist"),
+                    },
+                    {
+                        "title": "Sellers",
+                        "icon": "storefront",
+                        "link": reverse_lazy("admin:auctions_seller_changelist"),
+                    },
+                    {
+                        "title": "Bids",
+                        "icon": "price_check",
+                        "link": reverse_lazy("admin:auctions_bid_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": "Invoices & Reporting",
+                "separator": True,
+                "collapsible": False,
+                "items": [
+                    {
+                        "title": "Invoices",
+                        "icon": "receipt_long",
+                        "link": reverse_lazy("admin:auctions_invoice_changelist"),
+                    },
+                    {
+                        "title": "Reports Dashboard",
+                        "icon": "bar_chart",
+                        "link": reverse_lazy("reports_dashboard"),
+                    },
+                    {
+                        "title": "Export CSV",
+                        "icon": "download",
+                        "link": reverse_lazy("export_invoices_csv"),
+                    },
+                ],
+            },
+            {
+                "title": "Weekly Setup",
+                "separator": True,
+                "collapsible": False,
+                "items": [
+                    {
+                        "title": "New Weekly Auction",
+                        "icon": "event",
+                        "link": reverse_lazy("weekly_setup_seller"),
+                    },
+                ],
+            },
+            {
+                "title": "Users",
+                "separator": True,
+                "collapsible": False,
+                "items": [
+                    {
+                        "title": "Users",
+                        "icon": "person",
+                        "link": reverse_lazy("admin:auth_user_changelist"),
+                    },
+                    {
+                        "title": "Wishlists",
+                        "icon": "favorite",
+                        "link": reverse_lazy("admin:auctions_wishlist_changelist"),
+                    },
+                ],
+            },
+        ],
+    },
+}
 
 # ============================================================================
 # Django AllAuth Configuration
