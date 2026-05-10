@@ -290,7 +290,7 @@ UNFOLD = {
                     {
                         "title": "New Weekly Auction",
                         "icon": "event",
-                        "link": reverse_lazy("weekly_setup_seller"),
+                        "link": reverse_lazy("weekly_setup"),
                     },
                 ],
             },
