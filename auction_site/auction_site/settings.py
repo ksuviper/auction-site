@@ -163,9 +163,14 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 # Deny all framing to prevent clickjacking.
 X_FRAME_OPTIONS = 'DENY'
 
-# Secure cookies — only sent over HTTPS.  Automatically off in local dev (DEBUG=True).
-SESSION_COOKIE_SECURE = not DEBUG
-CSRF_COOKIE_SECURE = not DEBUG
+# Secure cookies — only sent over HTTPS.  Set to False when running on plain HTTP (no Cloudflare yet).
+SESSION_COOKIE_SECURE = os.getenv('SESSION_COOKIE_SECURE', str(not DEBUG)) == 'True'
+CSRF_COOKIE_SECURE = os.getenv('CSRF_COOKIE_SECURE', str(not DEBUG)) == 'True'
+
+# Trusted origins for CSRF — required when behind a reverse proxy or on a non-standard port.
+_csrf_origins = os.getenv('CSRF_TRUSTED_ORIGINS', '')
+if _csrf_origins:
+    CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf_origins.split(',')]
 
 # HSTS — off by default; set SECURE_HSTS_SECONDS=31536000 in production once HTTPS is confirmed.
 SECURE_HSTS_SECONDS = int(os.getenv('SECURE_HSTS_SECONDS', '0'))
