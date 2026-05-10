@@ -278,7 +278,7 @@ UNFOLD = {
                     {
                         "title": "Export CSV",
                         "icon": "download",
-                        "link": reverse_lazy("export_invoices_csv"),
+                        "link": reverse_lazy("reports_export_csv"),
                     },
                 ],
             },
