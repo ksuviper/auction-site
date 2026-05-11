@@ -8,6 +8,8 @@ django-allauth==65.14.3
 django-unfold==0.92.0
 django-apscheduler==0.7.0
 django-ratelimit==4.1.0
+django-storages==1.14.4
+boto3==1.38.8
 fido2==2.1.1
 Pillow==12.2.0
 PyJWT==2.12.1

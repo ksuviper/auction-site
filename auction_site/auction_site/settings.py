@@ -164,8 +164,42 @@ STATICFILES_DIRS = [
     BASE_DIR / 'auction_site' / 'static',
 ]
 
-MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+
+# ============================================================================
+# Cloudflare R2 Media Storage
+# ============================================================================
+
+_r2_account_id = os.getenv('CF_R2_ACCOUNT_ID', '')
+_r2_access_key = os.getenv('CF_R2_ACCESS_KEY_ID', '')
+_r2_secret_key = os.getenv('CF_R2_SECRET_ACCESS_KEY', '')
+_r2_bucket = os.getenv('CF_R2_BUCKET_NAME', '')
+_r2_custom_domain = os.getenv('CF_R2_CUSTOM_DOMAIN', '')
+
+if _r2_account_id and _r2_access_key and _r2_secret_key and _r2_bucket:
+    DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
+    STORAGES = {
+        'default': {
+            'BACKEND': 'storages.backends.s3boto3.S3Boto3Storage',
+        },
+        'staticfiles': {
+            'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage',
+        },
+    }
+    AWS_ACCESS_KEY_ID = _r2_access_key
+    AWS_SECRET_ACCESS_KEY = _r2_secret_key
+    AWS_STORAGE_BUCKET_NAME = _r2_bucket
+    AWS_S3_ENDPOINT_URL = f'https://{_r2_account_id}.r2.cloudflarestorage.com'
+    AWS_S3_REGION_NAME = 'auto'
+    AWS_DEFAULT_ACL = None
+    AWS_S3_FILE_OVERWRITE = False
+    AWS_QUERYSTRING_AUTH = False
+    if _r2_custom_domain:
+        MEDIA_URL = f'https://{_r2_custom_domain}/'
+    else:
+        MEDIA_URL = f'https://{_r2_account_id}.r2.cloudflarestorage.com/{_r2_bucket}/'
+else:
+    MEDIA_URL = '/media/'
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
