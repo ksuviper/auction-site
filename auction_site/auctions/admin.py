@@ -73,7 +73,6 @@ class AuctionListingAdmin(ModelAdmin):
     )
     list_filter = ('is_active', 'is_closed', 'category', 'seller')
     search_fields = ('title', 'description')
-    autocomplete_fields = ('category',)
     raw_id_fields = ('seller', 'winner')
     date_hierarchy = 'starts_at'
     readonly_fields = ('image_preview',)
