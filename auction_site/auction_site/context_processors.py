@@ -1,16 +1,28 @@
-from datetime import date, timedelta
+from django.utils import timezone
 
 from auctions.models import AuctionCategory, Seller
 
 
 def sidebar(request):
-    today = date.today()
-    week_start = today - timedelta(days=6)
+    now = timezone.now()
 
     categories = AuctionCategory.objects.filter(is_active=True)
+
+    # Show sellers who have at least one active, non-closed listing that hasn't ended
+    active_seller_ids = (
+        Seller.objects
+        .filter(
+            auctionlisting__is_active=True,
+            auctionlisting__is_closed=False,
+            auctionlisting__ends_at__gt=now,
+        )
+        .values_list('pk', flat=True)
+        .distinct()
+    )
+
     current_sellers = (
         Seller.objects
-        .filter(active_week__gte=week_start, active_week__lte=today)
+        .filter(pk__in=active_seller_ids)
         .select_related('category')
         .order_by('name')
     )
