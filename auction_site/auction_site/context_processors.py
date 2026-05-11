@@ -12,9 +12,9 @@ def sidebar(request):
     active_seller_ids = (
         Seller.objects
         .filter(
-            auctionlisting__is_active=True,
-            auctionlisting__is_closed=False,
-            auctionlisting__ends_at__gt=now,
+            listings__is_active=True,
+            listings__is_closed=False,
+            listings__ends_at__gt=now,
         )
         .values_list('pk', flat=True)
         .distinct()
