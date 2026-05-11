@@ -195,6 +195,7 @@ if _r2_account_id and _r2_access_key and _r2_secret_key and _r2_bucket:
     AWS_S3_FILE_OVERWRITE = False
     AWS_QUERYSTRING_AUTH = False
     if _r2_custom_domain:
+        AWS_S3_CUSTOM_DOMAIN = _r2_custom_domain
         MEDIA_URL = f'https://{_r2_custom_domain}/'
     else:
         MEDIA_URL = f'https://{_r2_account_id}.r2.cloudflarestorage.com/{_r2_bucket}/'
