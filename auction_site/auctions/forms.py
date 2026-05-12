@@ -1,12 +1,11 @@
 from decimal import Decimal
 
 from django import forms
-from allauth.account.forms import SignupForm
 
 from .models import UserProfile
 
 
-class CustomSignupForm(SignupForm):
+class CustomSignupForm(forms.Form):
     first_name = forms.CharField(
         max_length=30,
         required=True,
@@ -28,12 +27,10 @@ class CustomSignupForm(SignupForm):
         label='Last Name',
     )
 
-    def save(self, request):
-        user = super().save(request)
+    def signup(self, request, user):
         user.first_name = self.cleaned_data['first_name']
         user.last_name = self.cleaned_data['last_name']
         user.save()
-        return user
 
 
 class ProfileUpdateForm(forms.ModelForm):
