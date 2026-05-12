@@ -1,0 +1,80 @@
+{% extends "account/base_entrance.html" %}
+{% load i18n %}
+
+{% block head_title %}{% trans "Sign Up" %}{% endblock %}
+
+{% block inner_content %}
+<h1 class="h3 fw-bold mb-4">Create an Account</h1>
+<p class="mb-4">Already have an account? <a href="{{ login_url }}">Sign in</a>.</p>
+
+<form method="post" action="{% url 'account_signup' %}" novalidate>
+  {% csrf_token %}
+  {{ redirect_field }}
+
+  <!-- First & Last Name (custom fields) -->
+  <div class="row g-3 mb-3">
+    <div class="col-6">
+      <label for="id_first_name" class="form-label fw-semibold">First Name</label>
+      <input type="text" name="first_name" id="id_first_name"
+             class="form-control form-control-lg{% if form.first_name.errors %} is-invalid{% endif %}"
+             placeholder="First name" autocomplete="given-name"
+             value="{{ form.first_name.value|default:'' }}">
+      {% if form.first_name.errors %}
+      <div class="invalid-feedback">{{ form.first_name.errors|join:", " }}</div>
+      {% endif %}
+    </div>
+    <div class="col-6">
+      <label for="id_last_name" class="form-label fw-semibold">Last Name</label>
+      <input type="text" name="last_name" id="id_last_name"
+             class="form-control form-control-lg{% if form.last_name.errors %} is-invalid{% endif %}"
+             placeholder="Last name" autocomplete="family-name"
+             value="{{ form.last_name.value|default:'' }}">
+      {% if form.last_name.errors %}
+      <div class="invalid-feedback">{{ form.last_name.errors|join:", " }}</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Email -->
+  <div class="mb-3">
+    <label for="id_email" class="form-label fw-semibold">Email Address</label>
+    <input type="email" name="email" id="id_email"
+           class="form-control form-control-lg{% if form.email.errors %} is-invalid{% endif %}"
+           placeholder="you@example.com" autocomplete="email"
+           value="{{ form.email.value|default:'' }}">
+    {% if form.email.errors %}
+    <div class="invalid-feedback">{{ form.email.errors|join:", " }}</div>
+    {% endif %}
+  </div>
+
+  <!-- Password -->
+  <div class="mb-3">
+    <label for="id_password1" class="form-label fw-semibold">Password</label>
+    <input type="password" name="password1" id="id_password1"
+           class="form-control form-control-lg{% if form.password1.errors %} is-invalid{% endif %}"
+           placeholder="Choose a password" autocomplete="new-password">
+    {% if form.password1.errors %}
+    <div class="invalid-feedback">{{ form.password1.errors|join:", " }}</div>
+    {% endif %}
+  </div>
+
+  <!-- Confirm Password -->
+  <div class="mb-4">
+    <label for="id_password2" class="form-label fw-semibold">Confirm Password</label>
+    <input type="password" name="password2" id="id_password2"
+           class="form-control form-control-lg{% if form.password2.errors %} is-invalid{% endif %}"
+           placeholder="Repeat your password" autocomplete="new-password">
+    {% if form.password2.errors %}
+    <div class="invalid-feedback">{{ form.password2.errors|join:", " }}</div>
+    {% endif %}
+  </div>
+
+  {% if form.non_field_errors %}
+  <div class="alert alert-danger mb-3">{{ form.non_field_errors|join:", " }}</div>
+  {% endif %}
+
+  <button type="submit" class="btn btn-primary btn-lg w-100 fw-semibold">
+    <i class="fas fa-user-plus me-2"></i>Create Account
+  </button>
+</form>
+{% endblock %}
