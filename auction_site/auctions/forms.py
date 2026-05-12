@@ -55,9 +55,29 @@ class ProfileUpdateForm(forms.ModelForm):
         label='Last Name',
     )
 
+    COUNTRY_CHOICES = [
+        ('', '— Select country —'),
+        ('US', 'United States'),
+        ('CA', 'Canada'),
+        ('AU', 'Australia'),
+        ('GB', 'United Kingdom'),
+        ('NZ', 'New Zealand'),
+        ('DE', 'Germany'),
+        ('FR', 'France'),
+        ('JP', 'Japan'),
+        ('OTHER', 'Other'),
+    ]
+
+    country = forms.ChoiceField(
+        choices=COUNTRY_CHOICES,
+        required=False,
+        label='Country',
+        widget=forms.Select(attrs={'class': 'form-select form-select-lg'}),
+    )
+
     class Meta:
         model = UserProfile
-        fields = ['phone_number', 'address']
+        fields = ['phone_number', 'address', 'country']
         widgets = {
             'phone_number': forms.TextInput(attrs={
                 'class': 'form-control form-control-lg',

@@ -26,6 +26,12 @@ class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     phone_number = models.CharField(max_length=30, blank=True)
     address = models.TextField(blank=True)
+    country = models.CharField(
+        max_length=2,
+        blank=True,
+        default='',
+        help_text='2-letter country code, e.g. US',
+    )
     notes = models.TextField(blank=True)
 
     def __str__(self) -> str:

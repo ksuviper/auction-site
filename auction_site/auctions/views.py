@@ -113,6 +113,14 @@ class ListingDetailView(DetailView):
         ctx['bids'] = listing.bids.select_related('bidder').order_by('-placed_at')
         ctx['is_ended'] = listing.is_closed or listing.ends_at <= now
         ctx['bid_form'] = BidForm()
+
+        # Check if the logged-in user is US-verified
+        if self.request.user.is_authenticated:
+            profile, _ = UserProfile.objects.get_or_create(user=self.request.user)
+            ctx['us_verified'] = profile.country == 'US'
+        else:
+            ctx['us_verified'] = False
+
         return ctx
 
 
@@ -128,6 +136,17 @@ class PlaceBidView(LoginRequiredMixin, View):
         if getattr(request, 'limited', False):
             messages.error(request, 'You are placing bids too quickly. Please wait a moment.')
             return redirect('listing_detail', pk=pk)
+
+        # US-only restriction
+        profile, _ = UserProfile.objects.get_or_create(user=request.user)
+        if profile.country != 'US':
+            messages.error(
+                request,
+                'Bidding is restricted to US residents. '
+                'Please update your profile with a US country selection.',
+            )
+            return redirect('listing_detail', pk=pk)
+
         listing = get_object_or_404(AuctionListing, pk=pk)
         now = timezone.now()
 

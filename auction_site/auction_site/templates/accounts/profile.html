@@ -29,6 +29,20 @@
 
           <dt class="col-sm-4 text-muted fw-normal mt-3">Address</dt>
           <dd class="col-sm-8 fw-semibold mt-3" style="white-space: pre-line;">{{ profile.address|default:"Not provided" }}</dd>
+
+          <dt class="col-sm-4 text-muted fw-normal mt-3">Country</dt>
+          <dd class="col-sm-8 fw-semibold mt-3">
+            {% if profile.country %}
+              {{ profile.country }}
+              {% if profile.country == 'US' %}
+                <span class="badge bg-success ms-1"><i class="fas fa-check me-1"></i>Bidding enabled</span>
+              {% else %}
+                <span class="badge bg-warning text-dark ms-1"><i class="fas fa-lock me-1"></i>Bidding restricted</span>
+              {% endif %}
+            {% else %}
+              <span class="text-danger">Not set — <a href="{% url 'profile_edit' %}">update to bid</a></span>
+            {% endif %}
+          </dd>
         </dl>
 
       </div>
