@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.db import models
+from django.utils.text import slugify
 
 User = get_user_model()
 
@@ -12,6 +13,10 @@ class AuctionCategory(models.Model):
     class Meta:
         ordering = ['name']
         verbose_name_plural = 'Auction categories'
+
+    def save(self, *args, **kwargs):
+        self.slug = slugify(self.name)
+        super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         return self.name
