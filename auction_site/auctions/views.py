@@ -1,5 +1,3 @@
-from datetime import date, timedelta
-
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import get_object_or_404, redirect
@@ -47,11 +45,6 @@ class ProfileUpdateView(LoginRequiredMixin, UpdateView):
 
 # ── Auction browsing views ────────────────────────────────────────────────────
 
-def _current_week_bounds():
-    today = date.today()
-    return today - timedelta(days=6), today
-
-
 class CategoryListingView(ListView):
     template_name = 'auctions/category.html'
     context_object_name = 'listings'
@@ -60,7 +53,6 @@ class CategoryListingView(ListView):
         self.category = get_object_or_404(
             AuctionCategory, slug=self.kwargs['slug'], is_active=True
         )
-        week_start, today = _current_week_bounds()
         now = timezone.now()
         return (
             AuctionListing.objects
@@ -69,8 +61,6 @@ class CategoryListingView(ListView):
                 is_active=True,
                 is_closed=False,
                 ends_at__gt=now,
-                seller__active_week__gte=week_start,
-                seller__active_week__lte=today,
             )
             .select_related('seller', 'category')
             .order_by('ends_at')
