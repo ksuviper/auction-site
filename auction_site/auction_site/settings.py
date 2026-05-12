@@ -362,6 +362,7 @@ AUTHENTICATION_BACKENDS = [
 # Account settings — email-only login, no username required at signup
 ACCOUNT_LOGIN_METHODS = {'email'}
 ACCOUNT_SIGNUP_FIELDS = ['email*', 'password1*', 'password2*']
+ACCOUNT_SIGNUP_FORM_CLASS = 'auctions.forms.CustomSignupForm'
 ACCOUNT_SESSION_REMEMBER = True
 ACCOUNT_EMAIL_VERIFICATION = 'optional'
 
