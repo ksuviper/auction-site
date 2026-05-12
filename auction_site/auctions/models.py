@@ -38,11 +38,9 @@ class Seller(models.Model):
         help_text='e.g. PayPal, Venmo, Zelle'
     )
     shipping_fee = models.DecimalField(max_digits=7, decimal_places=2)
-    active_week = models.DateField(help_text='Start date of the week this seller is active')
-    category = models.ForeignKey(
-        AuctionCategory,
-        on_delete=models.PROTECT,
-        related_name='sellers',
+    active_week = models.DateField(
+        null=True, blank=True,
+        help_text='Start date of the week this seller is active',
     )
 
     class Meta:

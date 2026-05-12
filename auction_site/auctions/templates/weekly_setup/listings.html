@@ -22,9 +22,8 @@
       </a>
     </div>
     <p class="text-muted mb-4">
-      Seller: <strong>{{ seller.name }}</strong> &nbsp;·&nbsp;
-      Category: <strong>{{ seller.category.name }}</strong> &nbsp;·&nbsp;
-      Week of: <strong>{{ seller.active_week }}</strong>
+      Seller: <strong>{{ seller.name }}</strong>
+      {% if seller.active_week %}&nbsp;·&nbsp; Week of: <strong>{{ seller.active_week }}</strong>{% endif %}
     </p>
 
     <form method="post" enctype="multipart/form-data">

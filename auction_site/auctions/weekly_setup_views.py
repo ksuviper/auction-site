@@ -39,7 +39,7 @@ class WeeklySetupListingsView(StaffRequiredMixin, View):
     template_name = 'weekly_setup/listings.html'
 
     def _get_seller(self, seller_pk):
-        return get_object_or_404(Seller.objects.select_related('category'), pk=seller_pk)
+        return get_object_or_404(Seller, pk=seller_pk)
 
     def get(self, request, seller_pk):
         seller = self._get_seller(seller_pk)
@@ -65,7 +65,6 @@ class WeeklySetupListingsView(StaffRequiredMixin, View):
 
             listing = form.save(commit=False)
             listing.seller = seller
-            listing.category = seller.category
             listing.current_bid = 0
             listing.is_active = True
             listing.is_closed = False
@@ -96,6 +95,6 @@ class WeeklySetupDoneView(StaffRequiredMixin, View):
     template_name = 'weekly_setup/done.html'
 
     def get(self, request, seller_pk):
-        seller = get_object_or_404(Seller.objects.select_related('category'), pk=seller_pk)
+        seller = get_object_or_404(Seller, pk=seller_pk)
         listings = seller.listings.filter(is_closed=False).order_by('starts_at')
         return render(request, self.template_name, {'seller': seller, 'listings': listings})

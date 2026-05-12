@@ -6,9 +6,6 @@
 <nav aria-label="breadcrumb" class="mb-4">
   <ol class="breadcrumb fs-5">
     <li class="breadcrumb-item"><a href="{% url 'home' %}">Home</a></li>
-    <li class="breadcrumb-item">
-      <a href="{% url 'category_listings' slug=seller.category.slug %}">{{ seller.category.name }}</a>
-    </li>
     <li class="breadcrumb-item active" aria-current="page">{{ seller.name }}</li>
   </ol>
 </nav>

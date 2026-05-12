@@ -1,6 +1,6 @@
 from django.utils import timezone
 
-from auctions.models import AuctionCategory, Seller
+from auctions.models import AuctionCategory, AuctionListing
 
 
 def sidebar(request):
@@ -8,32 +8,29 @@ def sidebar(request):
 
     categories = AuctionCategory.objects.filter(is_active=True)
 
-    # Show sellers who have at least one active, non-closed listing that hasn't ended
-    active_seller_ids = (
-        Seller.objects
-        .filter(
-            listings__is_active=True,
-            listings__is_closed=False,
-            listings__ends_at__gt=now,
-        )
-        .values_list('pk', flat=True)
-        .distinct()
+    # Get active listings with their sellers, grouped by category
+    active_listings = (
+        AuctionListing.objects
+        .filter(is_active=True, is_closed=False, ends_at__gt=now)
+        .select_related('seller', 'category')
     )
 
-    current_sellers = (
-        Seller.objects
-        .filter(pk__in=active_seller_ids)
-        .select_related('category')
-        .order_by('name')
-    )
-
+    # Build {category_id: set of sellers}
     sellers_by_cat = {}
-    for seller in current_sellers:
-        sellers_by_cat.setdefault(seller.category_id, []).append(seller)
+    for listing in active_listings:
+        if listing.seller:
+            sellers_by_cat.setdefault(listing.category_id, {})
+            sellers_by_cat[listing.category_id][listing.seller.pk] = listing.seller
 
     return {
         'sidebar_data': [
-            {'category': cat, 'sellers': sellers_by_cat.get(cat.pk, [])}
+            {
+                'category': cat,
+                'sellers': sorted(
+                    sellers_by_cat.get(cat.pk, {}).values(),
+                    key=lambda s: s.name,
+                ),
+            }
             for cat in categories
         ]
     }
