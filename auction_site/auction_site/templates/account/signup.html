@@ -7,11 +7,34 @@
 <h1 class="h3 fw-bold mb-4">Create an Account</h1>
 <p class="mb-4">Already have an account? <a href="{{ login_url }}">Sign in</a>.</p>
 
+{% if SOCIALACCOUNT_ENABLED %}
+<div class="d-grid gap-2 mb-4">
+  <a href="{% url 'google_login' %}" class="btn btn-outline-secondary btn-lg">
+    <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="" width="20" height="20" class="me-2">
+    Continue with Google
+  </a>
+  <a href="{% url 'facebook_login' %}" class="btn btn-outline-secondary btn-lg">
+    <img src="https://www.svgrepo.com/show/475647/facebook-color.svg" alt="" width="20" height="20" class="me-2">
+    Continue with Facebook
+  </a>
+  <a href="{% url 'microsoft_login' %}" class="btn btn-outline-secondary btn-lg">
+    <img src="https://www.svgrepo.com/show/475634/microsoft-color.svg" alt="" width="20" height="20" class="me-2">
+    Continue with Microsoft
+  </a>
+</div>
+
+<div class="d-flex align-items-center mb-4">
+  <hr class="flex-grow-1">
+  <span class="px-3 text-muted">or sign up with email</span>
+  <hr class="flex-grow-1">
+</div>
+{% endif %}
+
 <form method="post" action="{% url 'account_signup' %}" novalidate>
   {% csrf_token %}
   {{ redirect_field }}
 
-  <!-- First & Last Name (custom fields) -->
+  <!-- First & Last Name -->
   <div class="row g-3 mb-3">
     <div class="col-6">
       <label for="id_first_name" class="form-label fw-semibold">First Name</label>
@@ -48,7 +71,7 @@
   </div>
 
   <!-- Password -->
-  <div class="mb-3">
+  <div class="mb-1">
     <label for="id_password1" class="form-label fw-semibold">Password</label>
     <input type="password" name="password1" id="id_password1"
            class="form-control form-control-lg{% if form.password1.errors %} is-invalid{% endif %}"
@@ -57,6 +80,12 @@
     <div class="invalid-feedback">{{ form.password1.errors|join:", " }}</div>
     {% endif %}
   </div>
+  <ul class="text-muted small mb-3 ps-3">
+    <li>At least 8 characters</li>
+    <li>Cannot be entirely numeric</li>
+    <li>Cannot be too similar to your email</li>
+    <li>Cannot be a commonly used password</li>
+  </ul>
 
   <!-- Confirm Password -->
   <div class="mb-4">
