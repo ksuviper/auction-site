@@ -57,7 +57,6 @@ INSTALLED_APPS = [
     'allauth.socialaccount',
     'allauth.socialaccount.providers.google',
     'allauth.socialaccount.providers.facebook',
-    'allauth.socialaccount.providers.microsoft',
     'allauth.mfa',
     'django_apscheduler',
 
@@ -404,13 +403,6 @@ SOCIALACCOUNT_PROVIDERS = {
         },
         'METHOD': 'oauth2',
         'SCOPE': ['email', 'public_profile'],
-    },
-    'microsoft': {
-        'APP': {
-            'client_id': os.getenv('MICROSOFT_CLIENT_ID', ''),
-            'secret': os.getenv('MICROSOFT_CLIENT_SECRET', ''),
-        },
-        'TENANT': 'common',
     },
 }
 

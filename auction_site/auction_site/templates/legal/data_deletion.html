@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}Data Deletion – ASQ Daylily Auctions{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-lg-8">
+
+    <h1 class="fw-bold mb-1">Data Deletion Request</h1>
+    <p class="text-muted mb-4">How to remove your data from ASQ Daylily Auctions</p>
+
+    <div class="card shadow-sm mb-4">
+      <div class="card-body p-4 fs-5" style="line-height:1.8;">
+
+        <h2 class="h5 fw-bold mb-3">If You Signed In with Facebook</h2>
+        <p>If you used Facebook to log in to ASQ Daylily Auctions and would like us to delete
+          the data associated with your account, please follow these steps:</p>
+
+        <ol class="mb-4">
+          <li class="mb-2">
+            Send an email to <a href="mailto:admin@asqdaylilies.com">admin@asqdaylilies.com</a>
+            with the subject line: <strong>"Data Deletion Request"</strong>
+          </li>
+          <li class="mb-2">
+            Include the email address or name associated with your account so we can locate it.
+          </li>
+          <li class="mb-2">
+            We will delete your account and personal data within <strong>30 days</strong> and
+            send you a confirmation email.
+          </li>
+        </ol>
+
+        <div class="alert alert-info" role="alert">
+          <i class="fas fa-info-circle me-2"></i>
+          <strong>Note:</strong> Deleting your account will remove your profile, bid history,
+          and personal details. Anonymized records of completed transactions (invoices) may be
+          retained for accounting and legal purposes.
+        </div>
+
+        <h2 class="h5 fw-bold mt-4 mb-3">Delete Your Own Account</h2>
+        <p>If you are currently logged in, you can also request deletion directly by
+          contacting us at
+          <a href="mailto:admin@asqdaylilies.com">admin@asqdaylilies.com</a>.
+        </p>
+
+        <h2 class="h5 fw-bold mt-4 mb-3">Questions</h2>
+        <p>For any privacy-related questions, please review our
+          <a href="{% url 'privacy_policy' %}">Privacy Policy</a> or contact us at
+          <a href="mailto:admin@asqdaylilies.com">admin@asqdaylilies.com</a>.
+        </p>
+
+      </div>
+    </div>
+
+    <a href="{% url 'home' %}" class="btn btn-outline-secondary">
+      <i class="fas fa-arrow-left me-2"></i>Back to Home
+    </a>
+
+  </div>
+</div>
+{% endblock %}

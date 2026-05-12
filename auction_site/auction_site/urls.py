@@ -26,6 +26,8 @@ from . import views
 urlpatterns = [
     path('', views.index, name='home'),
     path('robots.txt', TemplateView.as_view(template_name='robots.txt', content_type='text/plain')),
+    path('privacy/', TemplateView.as_view(template_name='legal/privacy_policy.html'), name='privacy_policy'),
+    path('privacy/data-deletion/', TemplateView.as_view(template_name='legal/data_deletion.html'), name='data_deletion'),
     path('favicon.ico', RedirectView.as_view(url=settings.STATIC_URL + 'favicon.ico', permanent=True)),
     path('admin/invoices/', include('auctions.invoice_urls')),
     path('admin/weekly-setup/', include('auctions.weekly_setup_urls')),
