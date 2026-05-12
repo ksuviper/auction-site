@@ -15,8 +15,11 @@
       <div class="card-body p-4">
 
         <dl class="row fs-5 mb-0">
-          <dt class="col-sm-4 text-muted fw-normal">Username</dt>
-          <dd class="col-sm-8 fw-semibold">{{ request.user.username }}</dd>
+          <dt class="col-sm-4 text-muted fw-normal">First Name</dt>
+          <dd class="col-sm-8 fw-semibold">{{ request.user.first_name|default:"Not provided" }}</dd>
+
+          <dt class="col-sm-4 text-muted fw-normal mt-3">Last Name</dt>
+          <dd class="col-sm-8 fw-semibold mt-3">{{ request.user.last_name|default:"Not provided" }}</dd>
 
           <dt class="col-sm-4 text-muted fw-normal mt-3">Email</dt>
           <dd class="col-sm-8 fw-semibold mt-3">{{ request.user.email|default:"—" }}</dd>

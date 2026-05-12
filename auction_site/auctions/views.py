@@ -33,6 +33,15 @@ class ProfileUpdateView(LoginRequiredMixin, UpdateView):
         profile, _ = UserProfile.objects.get_or_create(user=self.request.user)
         return profile
 
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['user'] = self.request.user
+        return kwargs
+
+    def form_valid(self, form):
+        form.save_user(self.request.user)
+        return super().form_valid(form)
+
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         ctx['next'] = self.request.GET.get('next') or self.request.POST.get('next', '')

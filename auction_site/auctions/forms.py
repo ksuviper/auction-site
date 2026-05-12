@@ -34,6 +34,27 @@ class CustomSignupForm(forms.Form):
 
 
 class ProfileUpdateForm(forms.ModelForm):
+    first_name = forms.CharField(
+        max_length=30,
+        required=False,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control form-control-lg',
+            'placeholder': 'First name',
+            'autocomplete': 'given-name',
+        }),
+        label='First Name',
+    )
+    last_name = forms.CharField(
+        max_length=30,
+        required=False,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control form-control-lg',
+            'placeholder': 'Last name',
+            'autocomplete': 'family-name',
+        }),
+        label='Last Name',
+    )
+
     class Meta:
         model = UserProfile
         fields = ['phone_number', 'address']
@@ -53,12 +74,24 @@ class ProfileUpdateForm(forms.ModelForm):
             'address': 'Mailing Address',
         }
 
+    def __init__(self, *args, **kwargs):
+        user = kwargs.pop('user', None)
+        super().__init__(*args, **kwargs)
+        if user:
+            self.fields['first_name'].initial = user.first_name
+            self.fields['last_name'].initial = user.last_name
+
     def clean_phone_number(self):
         value = self.cleaned_data.get('phone_number', '').strip()
         digits = ''.join(c for c in value if c.isdigit())
         if value and len(digits) < 7:
             raise forms.ValidationError('Please enter a valid phone number.')
         return value
+
+    def save_user(self, user):
+        user.first_name = self.cleaned_data.get('first_name', '')
+        user.last_name = self.cleaned_data.get('last_name', '')
+        user.save(update_fields=['first_name', 'last_name'])
 
 
 class BidForm(forms.Form):
