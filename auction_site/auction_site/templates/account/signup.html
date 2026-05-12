@@ -8,19 +8,22 @@
 <p class="mb-4">Already have an account? <a href="{{ login_url }}">Sign in</a>.</p>
 
 {% if SOCIALACCOUNT_ENABLED %}
-<div class="d-grid gap-2 mb-4">
-  <a href="{% url 'google_login' %}" class="btn btn-outline-secondary btn-lg">
-    <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="" width="20" height="20" class="me-2">
-    Continue with Google
-  </a>
-  <a href="{% url 'facebook_login' %}" class="btn btn-outline-secondary btn-lg">
-    <img src="https://www.svgrepo.com/show/475647/facebook-color.svg" alt="" width="20" height="20" class="me-2">
-    Continue with Facebook
-  </a>
-  <a href="{% url 'microsoft_login' %}" class="btn btn-outline-secondary btn-lg">
-    <img src="https://www.svgrepo.com/show/448224/microsoft.svg" alt="" width="20" height="20" class="me-2">
-    Continue with Microsoft
-  </a>
+<div class="row g-2 mb-4">
+  <div class="col-4">
+    <a href="{% url 'google_login' %}" class="btn btn-outline-secondary btn-lg w-100" title="Continue with Google">
+      <i class="fab fa-google me-1"></i> Google
+    </a>
+  </div>
+  <div class="col-4">
+    <a href="{% url 'facebook_login' %}" class="btn btn-outline-secondary btn-lg w-100" title="Continue with Facebook">
+      <i class="fab fa-facebook me-1"></i> Facebook
+    </a>
+  </div>
+  <div class="col-4">
+    <a href="{% url 'microsoft_login' %}" class="btn btn-outline-secondary btn-lg w-100" title="Continue with Microsoft">
+      <i class="fab fa-microsoft me-1"></i> Microsoft
+    </a>
+  </div>
 </div>
 
 <div class="d-flex align-items-center mb-4">
