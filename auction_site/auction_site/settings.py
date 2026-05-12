@@ -267,13 +267,19 @@ UNFOLD = {
     "SIDEBAR": {
         "show_search": True,
         "show_all_applications": False,
-        "navigation_header": [
-            {
-                "title": "← Back to Main Site",
-                "link": "/",
-            },
-        ],
         "navigation": [
+            {
+                "title": "Main Site",
+                "separator": False,
+                "collapsible": False,
+                "items": [
+                    {
+                        "title": "← Back to Main Site",
+                        "icon": "home",
+                        "link": "/",
+                    },
+                ],
+            },
             {
                 "title": "Auctions",
                 "separator": False,
