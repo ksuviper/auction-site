@@ -61,6 +61,9 @@ class Command(BaseCommand):
         for listing in ended:
             try:
                 winner, invoice = self._close_listing(listing)
+                if winner is None and invoice is None:
+                    # Already closed by a concurrent worker — skip silently.
+                    continue
                 closed += 1
                 if invoice:
                     invoiced += 1
@@ -86,7 +89,24 @@ class Command(BaseCommand):
     def _close_listing(self, listing):
         """
         Close the listing atomically.  Returns (top_bid_or_None, invoice_or_None).
+
+        Uses select_for_update() to acquire a row-level lock so that concurrent
+        gunicorn workers (each running their own APScheduler) cannot double-process
+        the same listing and create duplicate invoices.
         """
+        # Re-fetch with a row lock — the second worker will block here until
+        # the first worker's transaction commits, then see is_closed=True and bail.
+        listing = (
+            AuctionListing.objects
+            .select_for_update()
+            .select_related('seller')
+            .get(pk=listing.pk)
+        )
+
+        if listing.is_closed:
+            logger.debug('Listing pk=%d already closed by another worker — skipping.', listing.pk)
+            return None, None
+
         top_bid = listing.bids.select_related('bidder').order_by('-amount').first()
 
         listing.is_closed = True
