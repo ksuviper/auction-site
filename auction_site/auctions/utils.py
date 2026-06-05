@@ -1,6 +1,35 @@
 """Shared helpers for subscription gating (views, decorators, templates)."""
 
+import logging
+
+from django.conf import settings
+from django.core.mail import send_mail
 from django.utils import timezone
+
+logger = logging.getLogger(__name__)
+
+
+def _safe_send(subject, body, recipients):
+    """
+    send_mail wrapper that logs failures without raising.
+
+    Mirrors the helper in close_ended_auctions.py; lives here so the
+    subscription, buy-now, and comment flows can reuse it. (The duplicate copy
+    in close_ended_auctions.py is consolidated onto this one in a later step.)
+    """
+    if not recipients:
+        return
+    try:
+        send_mail(
+            subject=subject,
+            message=body,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=recipients,
+            fail_silently=False,
+        )
+        logger.debug('Email sent: "%s" -> %s', subject, recipients)
+    except Exception:
+        logger.exception('Failed to send email "%s" to %s', subject, recipients)
 
 
 def has_active_subscription(user) -> bool:

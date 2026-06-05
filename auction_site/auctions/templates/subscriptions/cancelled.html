@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}Checkout Cancelled – Above Status Quo{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-7">
+    <div class="card border-secondary shadow-sm">
+      <div class="card-body p-5 text-center">
+        <i class="fas fa-circle-info fa-3x text-secondary mb-3 d-block"></i>
+        <h1 class="h3 fw-bold mb-3">Checkout cancelled</h1>
+        <p class="fs-5 mb-4">
+          You cancelled the PayPal checkout. <strong>No charge was made.</strong>
+        </p>
+        <a href="/subscribe/" class="btn btn-primary btn-lg">
+          <i class="fas fa-rotate-right me-2"></i>Try again
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

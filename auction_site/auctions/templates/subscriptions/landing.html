@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}Membership – Above Status Quo{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-9">
+
+    <h1 class="fw-bold mb-4 text-center">ASQ Daylily Membership</h1>
+
+    {% if subscription and subscription.status == 'active' %}
+    <!-- Active membership -->
+    <div class="card border-success shadow-sm mb-4">
+      <div class="card-body p-4 text-center">
+        <i class="fas fa-circle-check fa-3x text-success mb-3 d-block"></i>
+        <h2 class="h4 fw-bold mb-2">Your membership is active</h2>
+        <p class="fs-5 mb-1">
+          Plan: <strong>{{ subscription.get_plan_display }}</strong>
+        </p>
+        <p class="fs-5 mb-1">
+          Status: <span class="badge bg-success">Active</span>
+        </p>
+        {% if subscription.current_period_end %}
+        <p class="text-muted mb-3">
+          Next renewal: {{ subscription.current_period_end|date:"F j, Y" }}
+        </p>
+        {% endif %}
+        <a href="/account/membership/" class="btn btn-outline-primary btn-lg">
+          <i class="fas fa-gear me-2"></i>Manage membership
+        </a>
+      </div>
+    </div>
+
+    {% else %}
+
+    {% if subscription and subscription.status == 'lapsed' %}
+    <!-- Lapsed — payment failed -->
+    <div class="alert alert-warning fs-5 mb-4" role="alert">
+      <i class="fas fa-triangle-exclamation me-2"></i>
+      <strong>Your last payment failed.</strong>
+      Your membership has lapsed. Re-subscribe below to restore full access.
+    </div>
+    {% endif %}
+
+    <p class="fs-5 text-center text-muted mb-4">
+      A membership lets you place bids and make purchases across ASQ Daylily Auctions.
+      Choose the plan that works for you.
+    </p>
+
+    <div class="row g-4">
+      <!-- Monthly -->
+      <div class="col-md-6">
+        <div class="card h-100 shadow-sm">
+          <div class="card-body p-4 text-center d-flex flex-column">
+            <h2 class="h4 fw-bold mb-2">Monthly</h2>
+            <div class="display-6 fw-bold text-success mb-1">${{ monthly_price }}</div>
+            <p class="text-muted mb-4">per month</p>
+            <form method="post" action="{% url 'subscribe_create' plan='monthly' %}" class="mt-auto">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-primary btn-lg w-100 fw-semibold">
+                <i class="fab fa-paypal me-2"></i>Subscribe with PayPal
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- Annual -->
+      <div class="col-md-6">
+        <div class="card h-100 shadow-sm border-success">
+          <div class="card-body p-4 text-center d-flex flex-column">
+            <h2 class="h4 fw-bold mb-2">
+              Annual
+              {% if yearly_savings and yearly_savings > 0 %}
+              <span class="badge bg-success align-middle">Best value</span>
+              {% endif %}
+            </h2>
+            <div class="display-6 fw-bold text-success mb-1">${{ yearly_price }}</div>
+            <p class="text-muted mb-1">per year</p>
+            {% if yearly_savings and yearly_savings > 0 %}
+            <p class="text-success fw-semibold mb-4">Save about ${{ yearly_savings }} vs monthly</p>
+            {% else %}
+            <p class="text-muted mb-4">&nbsp;</p>
+            {% endif %}
+            <form method="post" action="{% url 'subscribe_create' plan='yearly' %}" class="mt-auto">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-primary btn-lg w-100 fw-semibold">
+                <i class="fab fa-paypal me-2"></i>Subscribe with PayPal
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}
