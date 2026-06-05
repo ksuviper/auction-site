@@ -216,6 +216,41 @@ class Invoice(models.Model):
         return f'Invoice #{self.pk} – {self.buyer.username} / {self.listing}'
 
 
+class ListingComment(models.Model):
+    listing = models.ForeignKey(
+        AuctionListing,
+        on_delete=models.CASCADE,
+        related_name='comments',
+    )
+    author = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='listing_comments',
+    )
+    body = models.TextField()
+    parent = models.ForeignKey(
+        'self',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='replies',
+    )
+    is_approved = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def save(self, *args, **kwargs):
+        # Replies inherit their parent's listing so admins only set the parent.
+        if self.parent_id and not self.listing_id:
+            self.listing = self.parent.listing
+        super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        return f'Comment by {self.author.username} on "{self.listing}"'
+
+
 class Wishlist(models.Model):
     user = models.ForeignKey(
         User,

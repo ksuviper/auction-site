@@ -304,6 +304,11 @@ UNFOLD = {
                         "icon": "price_check",
                         "link": reverse_lazy("admin:auctions_bid_changelist"),
                     },
+                    {
+                        "title": "Comments",
+                        "icon": "forum",
+                        "link": reverse_lazy("admin:auctions_listingcomment_changelist"),
+                    },
                 ],
             },
             {

@@ -134,6 +134,18 @@ class BidForm(forms.Form):
     )
 
 
+class CommentForm(forms.Form):
+    body = forms.CharField(
+        max_length=1000,
+        widget=forms.Textarea(attrs={
+            'class': 'form-control form-control-lg',
+            'rows': 3,
+            'placeholder': 'Ask a question or leave a comment…',
+        }),
+        label='Your question or comment',
+    )
+
+
 class ProxyBidForm(forms.Form):
     max_amount = forms.DecimalField(
         max_digits=9,

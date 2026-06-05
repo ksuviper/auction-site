@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.utils.html import mark_safe
-from unfold.admin import ModelAdmin, StackedInline
+from unfold.admin import ModelAdmin, StackedInline, TabularInline
 from unfold.forms import (
     AdminPasswordChangeForm,
     UserChangeForm,
@@ -14,6 +14,7 @@ from .models import (
     AuctionListing,
     Bid,
     Invoice,
+    ListingComment,
     ProxyBid,
     Seller,
     Subscription,
@@ -145,6 +146,44 @@ class WishlistAdmin(ModelAdmin):
     list_filter = ('notified',)
     search_fields = ('user__username', 'listing_title_keyword')
     raw_id_fields = ('user',)
+
+
+# ── Listing comments & questions ─────────────────────────────────────────────
+
+@admin.action(description='Approve selected comments')
+def approve_comments(modeladmin, request, queryset):
+    updated = queryset.update(is_approved=True)
+    modeladmin.message_user(request, f'Approved {updated} comment(s).')
+
+
+@admin.action(description='Reject (unapprove) selected comments')
+def reject_comments(modeladmin, request, queryset):
+    updated = queryset.update(is_approved=False)
+    modeladmin.message_user(request, f'Rejected {updated} comment(s).')
+
+
+class ReplyInline(TabularInline):
+    model = ListingComment
+    fk_name = 'parent'
+    fields = ('author', 'body', 'is_approved')
+    raw_id_fields = ('author',)
+    extra = 0
+    verbose_name = 'Reply'
+    verbose_name_plural = 'Replies'
+
+
+@admin.register(ListingComment)
+class ListingCommentAdmin(ModelAdmin):
+    list_display = ('listing', 'author', 'short_body', 'is_approved', 'created_at')
+    list_filter = ('is_approved', 'created_at')
+    search_fields = ('listing__title', 'author__username', 'body')
+    raw_id_fields = ('listing', 'author', 'parent')
+    actions = [approve_comments, reject_comments]
+    inlines = [ReplyInline]
+
+    @admin.display(description='Comment')
+    def short_body(self, obj):
+        return obj.body if len(obj.body) <= 60 else f'{obj.body[:60]}…'
 
 
 # ── Subscriptions ───────────────────────────────────────────────────────────

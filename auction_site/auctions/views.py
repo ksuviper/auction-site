@@ -3,19 +3,20 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.generic import DetailView, ListView, UpdateView
 from django_ratelimit.decorators import ratelimit
 
-from .forms import BidForm, ProfileUpdateForm, ProxyBidForm
+from .forms import BidForm, CommentForm, ProfileUpdateForm, ProxyBidForm
 from .models import (
     AuctionCategory,
     AuctionListing,
     Bid,
     Invoice,
+    ListingComment,
     ProxyBid,
     Seller,
     UserProfile,
@@ -126,6 +127,13 @@ class ListingDetailView(DetailView):
         ctx['is_ended'] = listing.is_closed or listing.ends_at <= now
         ctx['bid_form'] = BidForm()
         ctx['proxy_bid_form'] = ProxyBidForm()
+        ctx['comment_form'] = CommentForm()
+        ctx['comments'] = (
+            listing.comments.filter(is_approved=True, parent=None)
+            .select_related('author')
+            .prefetch_related('replies__author')
+            .order_by('created_at')
+        )
 
         # The logged-in user's active proxy bid on this listing, if any.
         ctx['proxy_bid'] = None
@@ -423,3 +431,59 @@ class PlaceProxyBidView(LoginRequiredMixin, View):
             f'We will bid for you automatically up to that amount.',
         )
         return redirect('listing_detail', pk=pk)
+
+
+# ── Listing comments & questions ───────────────────────────────────────────--
+
+class PostCommentView(LoginRequiredMixin, View):
+    """Post a question/comment on a listing. Login required, no subscription."""
+
+    def post(self, request, pk):
+        listing = get_object_or_404(AuctionListing, pk=pk)
+        form = CommentForm(request.POST)
+        if not form.is_valid():
+            messages.error(request, 'Please enter a question or comment.')
+            return redirect('listing_detail', pk=pk)
+
+        comment = ListingComment.objects.create(
+            listing=listing,
+            author=request.user,
+            body=form.cleaned_data['body'],
+            is_approved=False,
+        )
+        self._notify_new_comment(request, listing, comment)
+        messages.success(
+            request,
+            'Your question has been submitted and will appear after review.',
+        )
+        return redirect('listing_detail', pk=pk)
+
+    def _notify_new_comment(self, request, listing, comment):
+        recipients = []
+        admin_email = getattr(settings, 'ADMIN_EMAIL', '')
+        if admin_email:
+            recipients.append(admin_email)
+        if listing.seller and listing.seller.email:
+            recipients.append(listing.seller.email)
+        if not recipients:
+            return
+
+        admin_link = request.build_absolute_uri(
+            reverse('admin:auctions_listingcomment_changelist')
+        )
+        body = f"""\
+A new question was posted on: {listing.title}
+
+From:     {comment.author.username}
+Question: {comment.body}
+
+Review and approve it here:
+{admin_link}
+
+-- ASQ Daylily Auction System
+"""
+        _safe_send(
+            subject=f'New question on: {listing.title}',
+            body=body,
+            recipients=recipients,
+        )
