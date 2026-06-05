@@ -11,17 +11,23 @@ All emails follow the _safe_send() helper pattern. Timezone-aware datetimes
 are used throughout (TIME_ZONE=America/Chicago, USE_TZ=True).
 """
 
+import json
 import logging
 from datetime import timedelta
 
+import paypalrestsdk
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import HttpResponseBadRequest
+from django.db import transaction
+from django.http import HttpResponse, HttpResponseBadRequest
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
+from django.utils.decorators import method_decorator
 from django.views import View
+from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import TemplateView
 
 from .models import Subscription
@@ -29,6 +35,16 @@ from .paypal import PayPalError, paypal_request
 from .utils import _safe_send
 
 logger = logging.getLogger(__name__)
+
+
+def _ensure_paypal_configured():
+    """Lazily configure paypalrestsdk (used for webhook signature verification)."""
+    if settings.PAYPAL_CLIENT_ID and settings.PAYPAL_CLIENT_SECRET:
+        paypalrestsdk.configure({
+            'mode': settings.PAYPAL_MODE,
+            'client_id': settings.PAYPAL_CLIENT_ID,
+            'client_secret': settings.PAYPAL_CLIENT_SECRET,
+        })
 
 
 class SubscribeLandingView(LoginRequiredMixin, TemplateView):
@@ -213,3 +229,206 @@ class SubscribeCancelledView(LoginRequiredMixin, TemplateView):
         if subscription is not None and subscription.status == 'pending':
             subscription.delete()
         return super().get(request, *args, **kwargs)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class PayPalWebhookView(View):
+    """
+    Receive PayPal subscription webhooks and keep local Subscription records in
+    sync. PayPal cannot send a CSRF token, so this endpoint is CSRF-exempt and
+    instead verifies PayPal's transmission signature before processing.
+    """
+
+    def post(self, request, *args, **kwargs):
+        if not self._verify_signature(request):
+            logger.warning('PayPal webhook: signature verification failed.')
+            return HttpResponse(status=400)
+
+        try:
+            event = json.loads(request.body.decode('utf-8'))
+        except (ValueError, UnicodeDecodeError):
+            logger.warning('PayPal webhook: invalid JSON body.')
+            return HttpResponse(status=400)
+
+        event_type = event.get('event_type', '')
+        resource = event.get('resource') or {}
+
+        handler = {
+            'BILLING.SUBSCRIPTION.ACTIVATED': self._handle_activated,
+            'BILLING.SUBSCRIPTION.RENEWED': self._handle_renewed,
+            'BILLING.SUBSCRIPTION.PAYMENT.FAILED': self._handle_payment_failed,
+            'BILLING.SUBSCRIPTION.CANCELLED': self._handle_cancelled,
+            'BILLING.SUBSCRIPTION.EXPIRED': self._handle_expired,
+        }.get(event_type)
+
+        if handler is None:
+            logger.debug('PayPal webhook: unhandled event type %s', event_type)
+            return HttpResponse(status=200)
+
+        try:
+            handler(resource)
+        except Subscription.DoesNotExist:
+            # Nothing to retry — ack so PayPal stops resending.
+            logger.warning(
+                'PayPal webhook %s: no subscription for id %s',
+                event_type, resource.get('id'),
+            )
+        except Exception:
+            # Unexpected/transient failure — return non-200 so PayPal retries.
+            logger.exception('PayPal webhook %s: handler error', event_type)
+            return HttpResponse(status=500)
+
+        return HttpResponse(status=200)
+
+    # ── Signature verification ────────────────────────────────────────────────
+
+    def _verify_signature(self, request):
+        webhook_id = settings.PAYPAL_WEBHOOK_ID
+        if not webhook_id:
+            logger.error('PAYPAL_WEBHOOK_ID is not configured; rejecting webhook.')
+            return False
+
+        try:
+            transmission_id = request.headers['Paypal-Transmission-Id']
+            timestamp = request.headers['Paypal-Transmission-Time']
+            cert_url = request.headers['Paypal-Cert-Url']
+            auth_algo = request.headers['Paypal-Auth-Algo']
+            actual_sig = request.headers['Paypal-Transmission-Sig']
+        except KeyError:
+            logger.warning('PayPal webhook: missing signature headers.')
+            return False
+
+        _ensure_paypal_configured()
+        try:
+            return bool(paypalrestsdk.WebhookEvent.verify(
+                transmission_id,
+                timestamp,
+                webhook_id,
+                request.body.decode('utf-8'),
+                cert_url,
+                actual_sig,
+                auth_algo,
+            ))
+        except Exception:
+            logger.exception('PayPal webhook: signature verification raised.')
+            return False
+
+    # ── Event handlers ──────────────────────────────────────────────────────--
+
+    @staticmethod
+    def _next_billing_time(resource):
+        raw = (resource.get('billing_info') or {}).get('next_billing_time')
+        return parse_datetime(raw) if raw else None
+
+    def _handle_activated(self, resource):
+        with transaction.atomic():
+            sub = (
+                Subscription.objects.select_for_update()
+                .get(paypal_subscription_id=resource.get('id'))
+            )
+            sub.status = 'active'
+            fields = ['status']
+            next_billing = self._next_billing_time(resource)
+            if next_billing:
+                sub.current_period_end = next_billing
+                fields.append('current_period_end')
+            sub.save(update_fields=fields)
+
+    def _handle_renewed(self, resource):
+        with transaction.atomic():
+            sub = (
+                Subscription.objects.select_for_update()
+                .get(paypal_subscription_id=resource.get('id'))
+            )
+            # A renewal is a successful payment, so the membership is active and
+            # any prior grace period no longer applies.
+            sub.status = 'active'
+            sub.grace_period_end = None
+            fields = ['status', 'grace_period_end']
+            next_billing = self._next_billing_time(resource)
+            if next_billing:
+                sub.current_period_end = next_billing
+                fields.append('current_period_end')
+            sub.save(update_fields=fields)
+
+    def _handle_payment_failed(self, resource):
+        with transaction.atomic():
+            sub = (
+                Subscription.objects.select_for_update().select_related('user')
+                .get(paypal_subscription_id=resource.get('id'))
+            )
+            sub.status = 'lapsed'
+            sub.grace_period_end = timezone.now() + timedelta(days=3)
+            sub.save(update_fields=['status', 'grace_period_end'])
+        self._email_payment_failed(sub)
+
+    def _handle_cancelled(self, resource):
+        with transaction.atomic():
+            sub = (
+                Subscription.objects.select_for_update().select_related('user')
+                .get(paypal_subscription_id=resource.get('id'))
+            )
+            sub.status = 'cancelled'
+            sub.cancelled_at = timezone.now()
+            sub.save(update_fields=['status', 'cancelled_at'])
+        self._email_cancelled(sub)
+
+    def _handle_expired(self, resource):
+        with transaction.atomic():
+            sub = (
+                Subscription.objects.select_for_update()
+                .get(paypal_subscription_id=resource.get('id'))
+            )
+            sub.status = 'lapsed'
+            sub.save(update_fields=['status'])
+
+    # ── Webhook emails ────────────────────────────────────────────────────────
+
+    def _email_payment_failed(self, sub):
+        user = sub.user
+        if not user.email:
+            return
+        grace = (
+            sub.grace_period_end.strftime('%B %d, %Y')
+            if sub.grace_period_end else 'a short grace period'
+        )
+        body = f"""\
+Your ASQ Daylily Auctions payment failed.
+
+You have access until {grace}. Please update your payment method in PayPal to
+keep your membership active and avoid losing your bidding privileges.
+
+-- ASQ Daylily Auction Group
+"""
+        _safe_send(
+            subject='Your ASQ Daylily Auctions payment failed',
+            body=body,
+            recipients=[user.email],
+        )
+
+    def _email_cancelled(self, sub):
+        user = sub.user
+        if not user.email:
+            return
+        if sub.current_period_end and sub.current_period_end > timezone.now():
+            access_line = (
+                f'Your access continues until '
+                f'{sub.current_period_end.strftime("%B %d, %Y")}.'
+            )
+        else:
+            access_line = 'Your access has ended.'
+        body = f"""\
+Your ASQ Daylily Auctions membership has been cancelled.
+
+{access_line}
+
+You can re-subscribe at any time from the Membership page. Thank you for being
+part of the ASQ Daylily Auction Group.
+
+-- ASQ Daylily Auction Group
+"""
+        _safe_send(
+            subject='Your ASQ Daylily Auctions membership was cancelled',
+            body=body,
+            recipients=[user.email],
+        )
