@@ -10,8 +10,17 @@ from django.views import View
 from django.views.generic import DetailView, ListView, UpdateView
 from django_ratelimit.decorators import ratelimit
 
-from .forms import BidForm, ProfileUpdateForm
-from .models import AuctionCategory, AuctionListing, Bid, Invoice, Seller, UserProfile
+from .forms import BidForm, ProfileUpdateForm, ProxyBidForm
+from .models import (
+    AuctionCategory,
+    AuctionListing,
+    Bid,
+    Invoice,
+    ProxyBid,
+    Seller,
+    UserProfile,
+)
+from .services import run_proxy_bids
 from .utils import _safe_send, has_active_subscription
 
 
@@ -116,11 +125,16 @@ class ListingDetailView(DetailView):
         ctx['bids'] = listing.bids.select_related('bidder').order_by('-placed_at')
         ctx['is_ended'] = listing.is_closed or listing.ends_at <= now
         ctx['bid_form'] = BidForm()
+        ctx['proxy_bid_form'] = ProxyBidForm()
 
-        # Check if the logged-in user is US-verified
+        # The logged-in user's active proxy bid on this listing, if any.
+        ctx['proxy_bid'] = None
         if self.request.user.is_authenticated:
             profile, _ = UserProfile.objects.get_or_create(user=self.request.user)
             ctx['us_verified'] = profile.country == 'US'
+            ctx['proxy_bid'] = listing.proxy_bids.filter(
+                bidder=self.request.user, is_active=True
+            ).first()
         else:
             ctx['us_verified'] = False
 
@@ -190,13 +204,23 @@ class PlaceBidView(LoginRequiredMixin, View):
                 f'Your bid must be higher than the current bid of ${listing.current_bid:.2f}.',
             )
         else:
-            Bid.objects.create(listing=listing, bidder=request.user, amount=amount)
-            listing.current_bid = amount
-            listing.save(update_fields=['current_bid', 'updated_at'])
+            with transaction.atomic():
+                Bid.objects.create(listing=listing, bidder=request.user, amount=amount)
+                listing.current_bid = amount
+                listing.save(update_fields=['current_bid', 'updated_at'])
+                proxy_winner = run_proxy_bids(listing)
+
             messages.success(
                 request,
                 f'Your bid of ${amount:.2f} was placed successfully!',
             )
+            if proxy_winner is not None and proxy_winner != request.user:
+                listing.refresh_from_db(fields=['current_bid'])
+                messages.info(
+                    request,
+                    f'You were immediately outbid by a proxy bidder. '
+                    f'Current bid: ${listing.current_bid:.2f}.',
+                )
 
         return redirect('listing_detail', pk=pk)
 
@@ -331,3 +355,71 @@ Invoice ID:  {invoice.pk}
                 body=body,
                 recipients=[admin_email],
             )
+
+
+# ── Proxy (automatic) bidding ──────────────────────────────────────────────--
+
+@method_decorator(
+    ratelimit(key='user', rate='10/m', method='POST', block=False),
+    name='post',
+)
+class PlaceProxyBidView(LoginRequiredMixin, View):
+
+    def post(self, request, pk):
+        if getattr(request, 'limited', False):
+            messages.error(request, 'You are bidding too quickly. Please wait a moment.')
+            return redirect('listing_detail', pk=pk)
+
+        # Membership gate.
+        if not has_active_subscription(request.user):
+            messages.warning(request, 'A membership is required to place bids.')
+            return redirect('subscribe')
+
+        # US-only restriction (same as PlaceBidView).
+        profile, _ = UserProfile.objects.get_or_create(user=request.user)
+        if profile.country != 'US':
+            messages.error(
+                request,
+                'Bidding is restricted to US residents. '
+                'Please update your profile with a US country selection.',
+            )
+            return redirect('listing_detail', pk=pk)
+
+        listing = get_object_or_404(AuctionListing, pk=pk)
+        now = timezone.now()
+
+        if listing.listing_type != 'auction':
+            messages.error(request, 'Automatic bidding is only available on auction listings.')
+            return redirect('listing_detail', pk=pk)
+
+        if listing.is_closed or not listing.is_active or listing.ends_at <= now:
+            messages.error(request, 'This auction is not currently accepting bids.')
+            return redirect('listing_detail', pk=pk)
+
+        form = ProxyBidForm(request.POST)
+        if not form.is_valid():
+            messages.error(request, 'Please enter a valid maximum bid amount.')
+            return redirect('listing_detail', pk=pk)
+
+        max_amount = form.cleaned_data['max_amount']
+        if max_amount <= listing.current_bid:
+            messages.error(
+                request,
+                f'Your maximum bid must be higher than the current bid of '
+                f'${listing.current_bid:.2f}.',
+            )
+            return redirect('listing_detail', pk=pk)
+
+        # update_or_create lets a bidder raise their existing maximum.
+        ProxyBid.objects.update_or_create(
+            listing=listing,
+            bidder=request.user,
+            defaults={'max_amount': max_amount, 'is_active': True},
+        )
+        run_proxy_bids(listing)
+        messages.success(
+            request,
+            f'Your maximum bid of ${max_amount:.2f} is set. '
+            f'We will bid for you automatically up to that amount.',
+        )
+        return redirect('listing_detail', pk=pk)

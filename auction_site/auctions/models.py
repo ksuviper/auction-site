@@ -149,6 +149,28 @@ class Bid(models.Model):
         return f'{self.bidder.username} – ${self.amount} on "{self.listing}"'
 
 
+class ProxyBid(models.Model):
+    listing = models.ForeignKey(
+        AuctionListing,
+        on_delete=models.CASCADE,
+        related_name='proxy_bids',
+    )
+    bidder = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='proxy_bids',
+    )
+    max_amount = models.DecimalField(max_digits=9, decimal_places=2)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [('listing', 'bidder')]
+
+    def __str__(self) -> str:
+        return f'{self.bidder.username} – max ${self.max_amount} on "{self.listing}"'
+
+
 class Invoice(models.Model):
     listing = models.ForeignKey(
         AuctionListing,

@@ -13,12 +13,12 @@ Normally scheduled every 5 minutes by APScheduler (see auctions/scheduler.py).
 import logging
 
 from django.conf import settings
-from django.core.mail import send_mail
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
 from auctions.models import AuctionListing, Invoice
+from auctions.utils import _safe_send
 
 logger = logging.getLogger(__name__)
 
@@ -279,20 +279,3 @@ Ended at:       {listing.ends_at.strftime('%Y-%m-%d %H:%M %Z')}
             body=body,
             recipients=[admin_email],
         )
-
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-def _safe_send(subject, body, recipients):
-    """send_mail wrapper that logs failures without raising."""
-    try:
-        send_mail(
-            subject=subject,
-            message=body,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=recipients,
-            fail_silently=False,
-        )
-        logger.debug('Email sent: "%s" → %s', subject, recipients)
-    except Exception:
-        logger.exception('Failed to send email "%s" to %s', subject, recipients)

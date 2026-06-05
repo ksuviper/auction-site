@@ -6,6 +6,7 @@ from .views import (
     CategoryListingView,
     ListingDetailView,
     PlaceBidView,
+    PlaceProxyBidView,
     ProfileDetailView,
     ProfileUpdateView,
     SellerListingView,
@@ -19,5 +20,6 @@ urlpatterns = [
     path('listing/<int:pk>/', ListingDetailView.as_view(), name='listing_detail'),
     path('listing/<int:pk>/bid/', PlaceBidView.as_view(), name='place_bid'),
     path('listing/<int:pk>/buy-now/', BuyNowView.as_view(), name='buy_now'),
+    path('listing/<int:pk>/proxy-bid/', PlaceProxyBidView.as_view(), name='place_proxy_bid'),
     path('invoice/<int:pk>/', InvoiceDetailView.as_view(), name='invoice_detail'),
 ]

@@ -14,6 +14,7 @@ from .models import (
     AuctionListing,
     Bid,
     Invoice,
+    ProxyBid,
     Seller,
     Subscription,
     UserProfile,
@@ -108,6 +109,14 @@ class BidAdmin(ModelAdmin):
     search_fields = ('listing__title', 'bidder__username')
     raw_id_fields = ('listing', 'bidder')
     date_hierarchy = 'placed_at'
+
+
+@admin.register(ProxyBid)
+class ProxyBidAdmin(ModelAdmin):
+    list_display = ('listing', 'bidder', 'max_amount', 'is_active', 'created_at')
+    list_filter = ('is_active',)
+    search_fields = ('listing__title', 'bidder__username')
+    raw_id_fields = ('listing', 'bidder')
 
 
 @admin.register(Invoice)
