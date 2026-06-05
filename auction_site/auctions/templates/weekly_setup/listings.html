@@ -44,6 +44,8 @@
                 <th style="min-width:220px;">Description</th>
                 <th style="width:110px;">Start Price <span class="text-danger">*</span></th>
                 <th style="width:110px;">Reserve</th>
+                <th style="width:120px;">Type</th>
+                <th style="width:120px;">Buy Now $</th>
                 <th style="width:170px;">Starts At <span class="text-danger">*</span></th>
                 <th style="width:170px;">Ends At <span class="text-danger">*</span></th>
                 <th style="width:160px;">Image</th>
@@ -69,6 +71,16 @@
                 <td>
                   {{ form.reserve_price }}
                   {% if form.reserve_price.errors %}<div class="text-danger small">{{ form.reserve_price.errors|join:", " }}</div>{% endif %}
+                </td>
+                <td>
+                  {{ form.listing_type }}
+                  {% if form.listing_type.errors %}<div class="text-danger small">{{ form.listing_type.errors|join:", " }}</div>{% endif %}
+                </td>
+                <td>
+                  <div class="buy-now-price"{% if form.listing_type.value != 'buy_now' %} style="display:none;"{% endif %}>
+                    {{ form.buy_now_price }}
+                  </div>
+                  {% if form.buy_now_price.errors %}<div class="text-danger small">{{ form.buy_now_price.errors|join:", " }}</div>{% endif %}
                 </td>
                 <td>
                   {{ form.starts_at }}
@@ -117,6 +129,7 @@
   #listing-table input[type="text"],
   #listing-table input[type="number"],
   #listing-table input[type="datetime-local"],
+  #listing-table select,
   #listing-table textarea {
     width: 100%; padding: .25rem .4rem; font-size: .875rem;
     border: 1px solid #dee2e6; border-radius: .25rem;
@@ -132,6 +145,18 @@
 (function () {
   var addBtn = document.getElementById('add-row');
   var totalInput = document.querySelector('[name="listings-TOTAL_FORMS"]');
+
+  // Show the Buy Now price input only when the row's type is "Buy It Now".
+  function wireRow(row) {
+    var sel = row.querySelector('select[name$="-listing_type"]');
+    var wrap = row.querySelector('.buy-now-price');
+    if (!sel || !wrap) return;
+    function sync() { wrap.style.display = (sel.value === 'buy_now') ? '' : 'none'; }
+    sel.addEventListener('change', sync);
+    sync();
+  }
+
+  document.querySelectorAll('#listing-table tr.listing-row').forEach(wireRow);
 
   addBtn.addEventListener('click', function () {
     var tbody = document.querySelector('#listing-table tbody');
@@ -159,6 +184,9 @@
     newRow.querySelectorAll('input[type="file"]').forEach(function (el) {
       el.value = '';
     });
+    newRow.querySelectorAll('select').forEach(function (el) {
+      el.selectedIndex = 0;
+    });
     newRow.classList.remove('table-danger');
 
     // Update row number display.
@@ -167,6 +195,7 @@
 
     tbody.appendChild(newRow);
     totalInput.value = newIndex + 1;
+    wireRow(newRow);
   });
 })();
 </script>

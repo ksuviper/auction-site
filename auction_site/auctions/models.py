@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.text import slugify
 
@@ -66,6 +67,11 @@ class Seller(models.Model):
 
 
 class AuctionListing(models.Model):
+    LISTING_TYPE_CHOICES = [
+        ('auction', 'Auction'),
+        ('buy_now', 'Buy It Now'),
+    ]
+
     title = models.CharField(max_length=255)
     category = models.ForeignKey(
         AuctionCategory,
@@ -86,6 +92,12 @@ class AuctionListing(models.Model):
     reserve_price = models.DecimalField(
         max_digits=9, decimal_places=2, null=True, blank=True
     )
+    listing_type = models.CharField(
+        max_length=8, choices=LISTING_TYPE_CHOICES, default='auction'
+    )
+    buy_now_price = models.DecimalField(
+        max_digits=9, decimal_places=2, null=True, blank=True
+    )
     starts_at = models.DateTimeField()
     ends_at = models.DateTimeField()
     is_active = models.BooleanField(default=True)
@@ -102,6 +114,15 @@ class AuctionListing(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+
+    def clean(self):
+        super().clean()
+        if self.listing_type == 'buy_now' and (
+            self.buy_now_price is None or self.buy_now_price <= 0
+        ):
+            raise ValidationError(
+                {'buy_now_price': 'Buy It Now listings require a price greater than 0.'}
+            )
 
     def __str__(self) -> str:
         return self.title

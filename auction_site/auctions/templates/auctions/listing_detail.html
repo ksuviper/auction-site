@@ -57,7 +57,13 @@
     <!-- Bid status card -->
     <div class="card border-0 shadow-sm mb-3">
       <div class="card-body p-4">
-        {% if listing.current_bid > 0 %}
+        {% if listing.listing_type == 'buy_now' %}
+        <div class="mb-3">
+          <div class="text-muted fs-5 mb-1">Price</div>
+          <div class="fw-bold text-success" style="font-size:2.25rem;">${{ listing.buy_now_price }}</div>
+          <div class="text-muted">Buy It Now</div>
+        </div>
+        {% elif listing.current_bid > 0 %}
         <div class="mb-3">
           <div class="text-muted fs-5 mb-1">Current Bid</div>
           <div class="fw-bold text-success" style="font-size:2.25rem;">${{ listing.current_bid }}</div>
@@ -82,16 +88,56 @@
       </div>
     </div>
 
-    <!-- ── BID SECTION ── -->
+    <!-- ── BID / BUY SECTION ── -->
     {% user_can_bid request.user as can_bid %}
     {% if is_ended %}
     <div class="alert alert-secondary fs-5 mb-3" role="alert">
       <i class="fas fa-lock me-2"></i>
-      <strong>This auction has ended.</strong>
+      <strong>
+        {% if listing.listing_type == 'buy_now' %}This item has been sold.{% else %}This auction has ended.{% endif %}
+      </strong>
       {% if listing.winner %}
-      Won by <strong>{{ listing.winner.username }}</strong>.
+      {% if listing.listing_type == 'buy_now' %}Purchased{% else %}Won{% endif %}
+      by <strong>{{ listing.winner.username }}</strong>.
       {% endif %}
     </div>
+
+    {% elif listing.listing_type == 'buy_now' %}
+    <!-- Buy It Now -->
+    {% if not request.user.is_authenticated %}
+    <div class="card border-primary mb-3">
+      <div class="card-body p-4 text-center">
+        <i class="fas fa-bag-shopping fa-2x text-primary mb-2 d-block"></i>
+        <p class="fs-5 mb-3">Log in to purchase this item.</p>
+        <a href="{% url 'account_login' %}?next={{ request.path }}"
+           class="btn btn-primary btn-lg w-100">
+          <i class="fas fa-sign-in-alt me-2"></i>Log In to Purchase
+        </a>
+      </div>
+    </div>
+    {% elif not can_bid %}
+    <div class="card border-info mb-3">
+      <div class="card-body p-4 text-center">
+        <i class="fas fa-id-card fa-2x text-info mb-2 d-block"></i>
+        <p class="fs-5 mb-3">A membership is required to make purchases.</p>
+        <a href="/subscribe/" class="btn btn-primary btn-lg w-100 fw-semibold">
+          <i class="fas fa-id-card me-2"></i>Get a membership →
+        </a>
+      </div>
+    </div>
+    {% else %}
+    <div class="alert bid-commitment-alert mb-3" role="alert">
+      <i class="fas fa-exclamation-triangle me-2 text-warning"></i>
+      <strong>Clicking confirm is a commitment to purchase. This cannot be undone.</strong>
+    </div>
+    <form method="post" action="{% url 'buy_now' pk=listing.pk %}"
+          onsubmit="return confirm('Confirm purchase of {{ listing.title|escapejs }} for ${{ listing.buy_now_price }}? This cannot be undone.');">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-success btn-lg w-100 fw-semibold">
+        <i class="fas fa-bag-shopping me-2"></i>Buy It Now — ${{ listing.buy_now_price }}
+      </button>
+    </form>
+    {% endif %}
 
     {% elif not request.user.is_authenticated %}
     <div class="card border-primary mb-3">
@@ -201,6 +247,7 @@
   </div><!-- /col-lg-5 -->
 </div><!-- /row -->
 
+{% if listing.listing_type != 'buy_now' %}
 <!-- Bid history (full width below) -->
 <div class="row mt-4">
   <div class="col-12">
@@ -238,4 +285,5 @@
     {% endif %}
   </div>
 </div>
+{% endif %}
 {% endblock %}

@@ -33,6 +33,7 @@ def duplicate_listings(modeladmin, request, queryset):
         listing.is_closed = False
         listing.is_active = True
         listing.current_bid = 0
+        # listing_type and buy_now_price carry over with the cloned instance.
         listing.save()
     modeladmin.message_user(request, f'Duplicated {count} listing(s). Update dates before going live.')
 
@@ -74,8 +75,10 @@ class AuctionListingAdmin(ModelAdmin):
         'title',
         'category',
         'seller',
+        'listing_type',
         'start_price',
         'current_bid',
+        'buy_now_price',
         'reserve_price',
         'starts_at',
         'ends_at',
@@ -83,7 +86,7 @@ class AuctionListingAdmin(ModelAdmin):
         'is_closed',
         'winner',
     )
-    list_filter = ('is_active', 'is_closed', 'category', 'seller')
+    list_filter = ('listing_type', 'is_active', 'is_closed', 'category', 'seller')
     search_fields = ('title', 'description')
     raw_id_fields = ('winner',)
     date_hierarchy = 'starts_at'

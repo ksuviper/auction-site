@@ -1,5 +1,7 @@
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
 from django.utils import timezone
@@ -9,8 +11,8 @@ from django.views.generic import DetailView, ListView, UpdateView
 from django_ratelimit.decorators import ratelimit
 
 from .forms import BidForm, ProfileUpdateForm
-from .models import AuctionCategory, AuctionListing, Bid, Seller, UserProfile
-from .utils import has_active_subscription
+from .models import AuctionCategory, AuctionListing, Bid, Invoice, Seller, UserProfile
+from .utils import _safe_send, has_active_subscription
 
 
 # ── Profile views ────────────────────────────────────────────────────────────
@@ -197,3 +199,125 @@ class PlaceBidView(LoginRequiredMixin, View):
             )
 
         return redirect('listing_detail', pk=pk)
+
+
+# ── Buy It Now ─────────────────────────────────────────────────────────────--
+
+class BuyNowView(LoginRequiredMixin, View):
+
+    def post(self, request, pk):
+        # Membership gate (buy-now is not subject to the US-only auction rule).
+        if not has_active_subscription(request.user):
+            messages.warning(request, 'A membership is required to make purchases.')
+            return redirect('subscribe')
+
+        with transaction.atomic():
+            # Row lock so concurrent purchase attempts serialize — the second
+            # one blocks here, then sees is_closed=True below and bails out.
+            listing = get_object_or_404(
+                AuctionListing.objects.select_for_update().select_related('seller'),
+                pk=pk,
+            )
+
+            if listing.listing_type != 'buy_now':
+                messages.error(request, 'This item is not available for direct purchase.')
+                return redirect('listing_detail', pk=pk)
+
+            if listing.is_closed or not listing.is_active or listing.ends_at <= timezone.now():
+                messages.error(request, 'Sorry, this item has already been purchased.')
+                return redirect('listing_detail', pk=pk)
+
+            if listing.seller is None:
+                messages.error(request, 'This item cannot be purchased right now.')
+                return redirect('listing_detail', pk=pk)
+
+            listing.is_closed = True
+            listing.is_active = False
+            listing.winner = request.user
+            listing.save(update_fields=['is_closed', 'is_active', 'winner', 'updated_at'])
+
+            invoice = Invoice.objects.create(
+                listing=listing,
+                buyer=request.user,
+                seller=listing.seller,
+                amount=listing.buy_now_price,
+                shipping_fee=listing.seller.shipping_fee,
+                payment_method='',
+                is_manually_created=False,
+            )
+
+        # Emails are sent after the transaction commits.
+        self._send_purchase_emails(listing, request.user, invoice)
+        messages.success(
+            request,
+            'Purchase complete! Your invoice and payment details are below.',
+        )
+        return redirect('invoice_detail', pk=invoice.pk)
+
+    def _send_purchase_emails(self, listing, buyer, invoice):
+        seller = listing.seller
+        admin_email = getattr(settings, 'ADMIN_EMAIL', '')
+
+        # Buyer — purchase confirmation with payment instructions.
+        if buyer.email:
+            body = f"""\
+Thank you for your purchase, {buyer.username}!
+
+Item:            {listing.title}
+Price:           ${invoice.amount}
+Shipping fee:    ${invoice.shipping_fee}
+Total:           ${invoice.total}
+
+Seller:          {seller.name}
+Accepted payment: {seller.accepted_payment_methods}
+
+Please arrange payment with the seller using one of their accepted methods.
+You can view your invoice (#{invoice.pk}) any time from your account.
+
+-- ASQ Daylily Auction Group
+"""
+            _safe_send(
+                subject=f'Your ASQ Daylily purchase: {listing.title}',
+                body=body,
+                recipients=[buyer.email],
+            )
+
+        # Seller — sale notification (falls back to admin if no seller email).
+        seller_recipient = (seller.email if seller.email else '') or admin_email
+        if seller_recipient:
+            body = f"""\
+Your item "{listing.title}" was purchased by {buyer.username}.
+
+Price:         ${invoice.amount}
+Shipping fee:  ${invoice.shipping_fee}
+Buyer email:   {buyer.email or '(not provided)'}
+Invoice:       #{invoice.pk}
+
+Please contact the buyer to arrange payment and shipping.
+
+-- ASQ Daylily Auction System
+"""
+            _safe_send(
+                subject=f'Your item sold: {listing.title}',
+                body=body,
+                recipients=[seller_recipient],
+            )
+
+        # Admin — summary.
+        if admin_email:
+            body = f"""\
+[ASQ] Buy It Now — Purchase
+===========================
+Listing ID:  {listing.pk}
+Title:       {listing.title}
+Buyer:       {buyer.username} ({buyer.email or 'no email'})
+Amount:      ${invoice.amount}
+Invoice ID:  {invoice.pk}
+
+-- ASQ Daylily Auction System
+"""
+            _safe_send(
+                subject=f'[ASQ Admin] Buy Now: {listing.title}',
+                body=body,
+                recipients=[admin_email],
+            )

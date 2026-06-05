@@ -83,7 +83,10 @@ class WeeklyListingForm(forms.ModelForm):
 
     class Meta:
         model = AuctionListing
-        fields = ['title', 'description', 'start_price', 'reserve_price', 'starts_at', 'ends_at', 'image']
+        fields = [
+            'title', 'description', 'listing_type', 'start_price', 'buy_now_price',
+            'reserve_price', 'starts_at', 'ends_at', 'image',
+        ]
         widgets = {
             'starts_at': forms.DateTimeInput(
                 attrs={'type': 'datetime-local'},
@@ -94,6 +97,7 @@ class WeeklyListingForm(forms.ModelForm):
                 format='%Y-%m-%dT%H:%M',
             ),
             'description': forms.Textarea(attrs={'rows': 2}),
+            'listing_type': forms.Select(attrs={'class': 'listing-type-select'}),
         }
 
     def __init__(self, *args, **kwargs):
