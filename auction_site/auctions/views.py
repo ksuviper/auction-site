@@ -206,10 +206,20 @@ class PlaceBidView(LoginRequiredMixin, View):
 class BuyNowView(LoginRequiredMixin, View):
 
     def post(self, request, pk):
-        # Membership gate (buy-now is not subject to the US-only auction rule).
+        # Membership gate.
         if not has_active_subscription(request.user):
             messages.warning(request, 'A membership is required to make purchases.')
             return redirect('subscribe')
+
+        # US-only restriction (same as bidding).
+        profile, _ = UserProfile.objects.get_or_create(user=request.user)
+        if profile.country != 'US':
+            messages.error(
+                request,
+                'Purchases are restricted to US residents. '
+                'Please update your profile with a US country selection.',
+            )
+            return redirect('listing_detail', pk=pk)
 
         with transaction.atomic():
             # Row lock so concurrent purchase attempts serialize — the second

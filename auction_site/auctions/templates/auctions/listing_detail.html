@@ -125,6 +125,20 @@
         </a>
       </div>
     </div>
+    {% elif not us_verified %}
+    <div class="card border-warning mb-3">
+      <div class="card-body p-4 text-center">
+        <i class="fas fa-flag-usa fa-2x text-warning mb-2 d-block"></i>
+        <p class="fs-5 mb-3">
+          Purchases are open to <strong>US residents only</strong>.
+          Please update your profile to confirm your country before buying.
+        </p>
+        <a href="{% url 'profile_edit' %}?next={{ request.path }}"
+           class="btn btn-warning btn-lg w-100 fw-semibold">
+          <i class="fas fa-user-edit me-2"></i>Update My Profile
+        </a>
+      </div>
+    </div>
     {% else %}
     <div class="alert bid-commitment-alert mb-3" role="alert">
       <i class="fas fa-exclamation-triangle me-2 text-warning"></i>

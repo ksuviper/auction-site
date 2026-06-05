@@ -44,9 +44,12 @@ class BuyNowTests(TestCase):
             is_active=True,
         )
 
-    def _subscribed_user(self, username):
+    def _subscribed_user(self, username, country='US'):
         user = User.objects.create_user(username, f'{username}@example.com', 'pw')
         Subscription.objects.create(user=user, plan='monthly', status='active')
+        # Buy-now is US-only, same as bidding.
+        user.profile.country = country
+        user.profile.save(update_fields=['country'])
         return user
 
     def test_successful_purchase_closes_listing_and_creates_invoice(self):
@@ -86,6 +89,13 @@ class BuyNowTests(TestCase):
         self.client.force_login(user)
         resp = self.client.post(self.url)
         self.assertRedirects(resp, reverse('subscribe'), fetch_redirect_response=False)
+        self.assertFalse(Invoice.objects.filter(listing=self.listing).exists())
+
+    def test_non_us_user_blocked(self):
+        user = self._subscribed_user('cabuyer', country='CA')
+        self.client.force_login(user)
+        resp = self.client.post(self.url)
+        self.assertRedirects(resp, reverse('listing_detail', kwargs={'pk': self.listing.pk}))
         self.assertFalse(Invoice.objects.filter(listing=self.listing).exists())
 
     def test_unauthenticated_redirected_to_login(self):
