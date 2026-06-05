@@ -463,7 +463,7 @@ class PostCommentView(LoginRequiredMixin, View):
         admin_email = getattr(settings, 'ADMIN_EMAIL', '')
         if admin_email:
             recipients.append(admin_email)
-        if listing.seller and listing.seller.email:
+        if listing.seller and listing.seller.email and listing.seller.notify_on_comments:
             recipients.append(listing.seller.email)
         if not recipients:
             return

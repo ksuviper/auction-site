@@ -49,6 +49,10 @@ class Seller(models.Model):
         blank=True,
         help_text='Email address for auction-end notifications',
     )
+    notify_on_comments = models.BooleanField(
+        default=True,
+        help_text='Email this seller when a buyer posts a question on their listing.',
+    )
     bio = models.TextField(blank=True)
     accepted_payment_methods = models.TextField(
         help_text='e.g. PayPal, Venmo, Zelle'

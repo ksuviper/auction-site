@@ -63,8 +63,12 @@ class UserProfileAdmin(ModelAdmin):
 
 @admin.register(Seller)
 class SellerAdmin(ModelAdmin):
-    list_display = ('name', 'email', 'active_week', 'shipping_fee', 'accepted_payment_methods')
-    list_filter = ('active_week',)
+    list_display = (
+        'name', 'email', 'notify_on_comments', 'active_week',
+        'shipping_fee', 'accepted_payment_methods',
+    )
+    list_editable = ('notify_on_comments',)
+    list_filter = ('active_week', 'notify_on_comments')
     search_fields = ('name', 'email', 'bio')
     date_hierarchy = 'active_week'
 
