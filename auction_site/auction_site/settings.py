@@ -351,6 +351,11 @@ UNFOLD = {
                         "link": reverse_lazy("admin:auth_user_changelist"),
                     },
                     {
+                        "title": "Subscriptions",
+                        "icon": "card_membership",
+                        "link": reverse_lazy("admin:auctions_subscription_changelist"),
+                    },
+                    {
                         "title": "Wishlists",
                         "icon": "favorite",
                         "link": reverse_lazy("admin:auctions_wishlist_changelist"),
@@ -422,6 +427,21 @@ DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@asqdaylilies.com')
 
 # Admin / notification email
 ADMIN_EMAIL = os.getenv('ADMIN_EMAIL', '')
+
+# ============================================================================
+# PayPal — Subscriptions / Memberships
+# Set these in .env. Run `python manage.py create_paypal_plans` to generate the
+# plan IDs, then copy them into PAYPAL_MONTHLY_PLAN_ID / PAYPAL_YEARLY_PLAN_ID.
+# ============================================================================
+
+PAYPAL_CLIENT_ID = os.getenv('PAYPAL_CLIENT_ID', '')
+PAYPAL_CLIENT_SECRET = os.getenv('PAYPAL_CLIENT_SECRET', '')
+PAYPAL_MODE = os.getenv('PAYPAL_MODE', 'sandbox')  # 'sandbox' or 'live'
+PAYPAL_MONTHLY_PLAN_ID = os.getenv('PAYPAL_MONTHLY_PLAN_ID', '')
+PAYPAL_YEARLY_PLAN_ID = os.getenv('PAYPAL_YEARLY_PLAN_ID', '')
+PAYPAL_MONTHLY_PRICE = os.getenv('PAYPAL_MONTHLY_PRICE', '9.99')
+PAYPAL_YEARLY_PRICE = os.getenv('PAYPAL_YEARLY_PRICE', '99.99')
+PAYPAL_WEBHOOK_ID = os.getenv('PAYPAL_WEBHOOK_ID', '')
 
 # Redirect URLs
 LOGIN_REDIRECT_URL = '/'

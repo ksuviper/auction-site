@@ -1,6 +1,13 @@
 from django.contrib import admin
+from django.contrib.auth import get_user_model
+from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.utils.html import mark_safe
-from unfold.admin import ModelAdmin
+from unfold.admin import ModelAdmin, StackedInline
+from unfold.forms import (
+    AdminPasswordChangeForm,
+    UserChangeForm,
+    UserCreationForm,
+)
 
 from .models import (
     AuctionCategory,
@@ -8,9 +15,12 @@ from .models import (
     Bid,
     Invoice,
     Seller,
+    Subscription,
     UserProfile,
     Wishlist,
 )
+
+User = get_user_model()
 
 
 @admin.action(description='Duplicate selected listing(s) for re-use next week')
@@ -41,7 +51,9 @@ class AuctionCategoryAdmin(ModelAdmin):
 
 @admin.register(UserProfile)
 class UserProfileAdmin(ModelAdmin):
-    list_display = ('user', 'phone_number')
+    list_display = ('user', 'phone_number', 'subscription_required')
+    list_editable = ('subscription_required',)
+    list_filter = ('subscription_required',)
     search_fields = ('user__username', 'user__email', 'phone_number')
     raw_id_fields = ('user',)
 
@@ -121,3 +133,95 @@ class WishlistAdmin(ModelAdmin):
     list_filter = ('notified',)
     search_fields = ('user__username', 'listing_title_keyword')
     raw_id_fields = ('user',)
+
+
+# ── Subscriptions ───────────────────────────────────────────────────────────
+
+@admin.action(description='Mark selected subscriptions Active')
+def mark_active(modeladmin, request, queryset):
+    updated = queryset.update(status='active')
+    modeladmin.message_user(request, f'{updated} subscription(s) marked active.')
+
+
+@admin.action(description='Mark selected subscriptions Lapsed')
+def mark_lapsed(modeladmin, request, queryset):
+    updated = queryset.update(status='lapsed')
+    modeladmin.message_user(request, f'{updated} subscription(s) marked lapsed.')
+
+
+@admin.action(description='Exempt user from subscription requirement')
+def exempt_from_subscription(modeladmin, request, queryset):
+    count = 0
+    for sub in queryset.select_related('user__profile'):
+        profile = getattr(sub.user, 'profile', None)
+        if profile is not None:
+            profile.subscription_required = False
+            profile.save(update_fields=['subscription_required'])
+            count += 1
+    modeladmin.message_user(
+        request, f'Exempted {count} user(s) from the subscription requirement.'
+    )
+
+
+@admin.action(description='Require subscription for selected users')
+def require_subscription(modeladmin, request, queryset):
+    count = 0
+    for sub in queryset.select_related('user__profile'):
+        profile = getattr(sub.user, 'profile', None)
+        if profile is not None:
+            profile.subscription_required = True
+            profile.save(update_fields=['subscription_required'])
+            count += 1
+    modeladmin.message_user(
+        request, f'Required a subscription for {count} user(s).'
+    )
+
+
+@admin.register(Subscription)
+class SubscriptionAdmin(ModelAdmin):
+    list_display = (
+        'user',
+        'plan',
+        'status',
+        'current_period_end',
+        'grace_period_end',
+        'subscription_required_display',
+        'paypal_subscription_id',
+    )
+    list_filter = ('status', 'plan')
+    search_fields = ('user__username', 'user__email', 'paypal_subscription_id')
+    raw_id_fields = ('user',)
+    actions = [mark_active, mark_lapsed, exempt_from_subscription, require_subscription]
+
+    @admin.display(description='Sub. required')
+    def subscription_required_display(self, obj):
+        profile = getattr(obj.user, 'profile', None)
+        if profile is None:
+            return '—'
+        return 'Yes' if profile.subscription_required else 'No'
+
+
+# ── User admin with profile inline ───────────────────────────────────────────
+
+class UserProfileInline(StackedInline):
+    model = UserProfile
+    can_delete = False
+    max_num = 1
+    extra = 0
+    verbose_name_plural = 'Profile'
+    fields = ('subscription_required', 'phone_number', 'country', 'address', 'notes')
+
+
+# Replace the default auth User admin so the profile (and its
+# subscription_required flag) is editable inline. UserAdmin only renders
+# inlines on the change page, so the auto-created profile already exists.
+if admin.site.is_registered(User):
+    admin.site.unregister(User)
+
+
+@admin.register(User)
+class CustomUserAdmin(BaseUserAdmin, ModelAdmin):
+    form = UserChangeForm
+    add_form = UserCreationForm
+    change_password_form = AdminPasswordChangeForm
+    inlines = [UserProfileInline]

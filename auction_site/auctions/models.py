@@ -33,6 +33,10 @@ class UserProfile(models.Model):
         help_text='2-letter country code, e.g. US',
     )
     notes = models.TextField(blank=True)
+    subscription_required = models.BooleanField(
+        default=True,
+        help_text='Uncheck to allow this user to bid without a PayPal subscription (admin override).',
+    )
 
     def __str__(self) -> str:
         return f'Profile – {self.user.username}'
@@ -183,3 +187,42 @@ class Wishlist(models.Model):
 
     def __str__(self) -> str:
         return f'{self.user.username} – "{self.listing_title_keyword}"'
+
+
+class Subscription(models.Model):
+    PLAN_CHOICES = [
+        ('monthly', 'Monthly'),
+        ('yearly', 'Yearly'),
+    ]
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('active', 'Active'),
+        ('lapsed', 'Lapsed'),
+        ('cancelled', 'Cancelled'),
+    ]
+
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='subscription',
+    )
+    plan = models.CharField(max_length=10, choices=PLAN_CHOICES)
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default='pending')
+    paypal_subscription_id = models.CharField(
+        max_length=100, unique=True, null=True, blank=True
+    )
+    paypal_plan_id = models.CharField(max_length=100, blank=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    current_period_end = models.DateTimeField(null=True, blank=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    grace_period_end = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Set to 3 days after current_period_end when a payment fails',
+    )
+
+    class Meta:
+        ordering = ['-id']
+
+    def __str__(self) -> str:
+        return f'{self.user.username} – {self.get_plan_display()} ({self.status})'
