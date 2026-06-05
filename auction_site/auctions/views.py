@@ -10,6 +10,7 @@ from django_ratelimit.decorators import ratelimit
 
 from .forms import BidForm, ProfileUpdateForm
 from .models import AuctionCategory, AuctionListing, Bid, Seller, UserProfile
+from .utils import has_active_subscription
 
 
 # ── Profile views ────────────────────────────────────────────────────────────
@@ -136,6 +137,11 @@ class PlaceBidView(LoginRequiredMixin, View):
         if getattr(request, 'limited', False):
             messages.error(request, 'You are placing bids too quickly. Please wait a moment.')
             return redirect('listing_detail', pk=pk)
+
+        # Membership gate — must hold an active (or admin-exempt) subscription.
+        if not has_active_subscription(request.user):
+            messages.warning(request, 'A membership is required to place bids.')
+            return redirect('subscribe')
 
         # US-only restriction
         profile, _ = UserProfile.objects.get_or_create(user=request.user)

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load static %}
+{% load subscription_tags %}
 
 {% block title %}{{ listing.title }} – Above Status Quo{% endblock %}
 
@@ -82,6 +83,7 @@
     </div>
 
     <!-- ── BID SECTION ── -->
+    {% user_can_bid request.user as can_bid %}
     {% if is_ended %}
     <div class="alert alert-secondary fs-5 mb-3" role="alert">
       <i class="fas fa-lock me-2"></i>
@@ -118,6 +120,20 @@
         <a href="{% url 'profile_edit' %}?next={{ request.path }}"
            class="btn btn-warning btn-lg w-100 fw-semibold">
           <i class="fas fa-user-edit me-2"></i>Update My Profile
+        </a>
+      </div>
+    </div>
+
+    {% elif not can_bid %}
+    <!-- Membership required -->
+    <div class="card border-info mb-3">
+      <div class="card-body p-4 text-center">
+        <i class="fas fa-id-card fa-2x text-info mb-2 d-block"></i>
+        <p class="fs-5 mb-3">
+          A membership is required to bid on listings.
+        </p>
+        <a href="/subscribe/" class="btn btn-primary btn-lg w-100 fw-semibold">
+          <i class="fas fa-id-card me-2"></i>Get a membership →
         </a>
       </div>
     </div>
