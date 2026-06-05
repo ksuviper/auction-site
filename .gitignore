@@ -1,6 +1,15 @@
 docs/agreement.docx
 docs/SOW.docx
 
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Django
+db.sqlite3
+db.sqlite3-journal
+
 # Environment variables
 .env
 .env.local
@@ -9,3 +18,16 @@ docs/SOW.docx
 # Uploaded media — keep the folder structure but not the files
 media/listings/*
 !media/listings/.gitkeep
+
+# Archives
+*.zip
+
+# Editor / IDE
+.idea/
+.vscode/
+.claude/
+
+# Prompt notes
+addon_prompts_final.md
+addon_prompts_final_v2.md
+claude_code_prompts_1.md
