@@ -25,7 +25,7 @@
           Next renewal: {{ subscription.current_period_end|date:"F j, Y" }}
         </p>
         {% endif %}
-        <a href="/account/membership/" class="btn btn-outline-primary btn-lg">
+        <a href="{% url 'membership' %}" class="btn btn-outline-primary btn-lg">
           <i class="fas fa-gear me-2"></i>Manage membership
         </a>
       </div>

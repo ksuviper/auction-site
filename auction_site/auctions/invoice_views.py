@@ -4,14 +4,8 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
 
 from .invoice_forms import InvoiceCreateForm, InvoiceEditForm
+from .mixins import StaffRequiredMixin
 from .models import Invoice, Seller
-
-
-class StaffRequiredMixin:
-    def dispatch(self, request, *args, **kwargs):
-        if not request.user.is_authenticated or not request.user.is_staff:
-            return HttpResponseForbidden('Staff access required.')
-        return super().dispatch(request, *args, **kwargs)
 
 
 class InvoiceDashboardView(StaffRequiredMixin, View):

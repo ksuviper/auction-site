@@ -21,7 +21,7 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
 from django.http import HttpResponse, HttpResponseBadRequest
-from django.shortcuts import redirect
+from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -231,6 +231,101 @@ class SubscribeCancelledView(LoginRequiredMixin, TemplateView):
         return super().get(request, *args, **kwargs)
 
 
+class MembershipView(LoginRequiredMixin, View):
+    """User-facing membership status & management page."""
+
+    def get(self, request):
+        subscription = getattr(request.user, 'subscription', None)
+        if subscription is None:
+            return redirect('subscribe')
+
+        now = timezone.now()
+        in_grace = (
+            subscription.status == 'lapsed'
+            and subscription.grace_period_end is not None
+            and subscription.grace_period_end > now
+        )
+        can_cancel = subscription.status == 'active' or in_grace
+        can_resubscribe = (
+            subscription.status == 'cancelled'
+            or (subscription.status == 'lapsed' and not in_grace)
+        )
+        return render(request, 'subscriptions/membership.html', {
+            'subscription': subscription,
+            'in_grace': in_grace,
+            'can_cancel': can_cancel,
+            'can_resubscribe': can_resubscribe,
+        })
+
+
+class MembershipCancelView(LoginRequiredMixin, View):
+    """Cancel the user's PayPal subscription."""
+
+    def post(self, request):
+        subscription = getattr(request.user, 'subscription', None)
+        if subscription is None or subscription.status not in ('active', 'lapsed'):
+            messages.error(request, 'You do not have an active membership to cancel.')
+            return redirect('membership')
+
+        sub_id = subscription.paypal_subscription_id
+        if not sub_id:
+            messages.error(
+                request,
+                'We could not locate your PayPal subscription. Please contact us.',
+            )
+            return redirect('membership')
+
+        try:
+            resp = paypal_request(
+                'POST',
+                f'/v1/billing/subscriptions/{sub_id}/cancel',
+                json={'reason': 'Cancelled by user'},
+            )
+        except PayPalError:
+            logger.exception('PayPal auth failed cancelling subscription.')
+            messages.error(request, 'We could not cancel your membership right now. Please try again.')
+            return redirect('membership')
+
+        # PayPal returns 204 No Content on a successful cancel.
+        if resp.status_code not in (200, 204):
+            logger.error('PayPal cancel subscription failed (%s): %s', resp.status_code, resp.text)
+            messages.error(request, 'We could not cancel your membership right now. Please try again.')
+            return redirect('membership')
+
+        subscription.status = 'cancelled'
+        subscription.cancelled_at = timezone.now()
+        subscription.save(update_fields=['status', 'cancelled_at'])
+        self._email_cancelled(request.user, subscription)
+        messages.success(request, 'Your membership has been cancelled.')
+        return redirect('membership')
+
+    def _email_cancelled(self, user, subscription):
+        if not user.email:
+            return
+        if subscription.current_period_end and subscription.current_period_end > timezone.now():
+            access_line = (
+                f'You have access until '
+                f'{subscription.current_period_end.strftime("%B %d, %Y")}.'
+            )
+        else:
+            access_line = 'Your access has ended.'
+        body = f"""\
+Your ASQ Daylily Auctions membership has been cancelled.
+
+{access_line}
+
+You can re-subscribe at any time from the Membership page. Thank you for being
+part of the ASQ Daylily Auction Group.
+
+-- ASQ Daylily Auction Group
+"""
+        _safe_send(
+            subject='Your ASQ Daylily Auctions membership has been cancelled',
+            body=body,
+            recipients=[user.email],
+        )
+
+
 @method_decorator(csrf_exempt, name='dispatch')
 class PayPalWebhookView(View):
     """
@@ -368,10 +463,15 @@ class PayPalWebhookView(View):
                 Subscription.objects.select_for_update().select_related('user')
                 .get(paypal_subscription_id=resource.get('id'))
             )
-            sub.status = 'cancelled'
-            sub.cancelled_at = timezone.now()
-            sub.save(update_fields=['status', 'cancelled_at'])
-        self._email_cancelled(sub)
+            # Idempotent: if already cancelled (e.g. the user cancelled on-site,
+            # or PayPal retried this webhook), don't re-stamp or re-email.
+            already_cancelled = sub.status == 'cancelled'
+            if not already_cancelled:
+                sub.status = 'cancelled'
+                sub.cancelled_at = sub.cancelled_at or timezone.now()
+                sub.save(update_fields=['status', 'cancelled_at'])
+        if not already_cancelled:
+            self._email_cancelled(sub)
 
     def _handle_expired(self, resource):
         with transaction.atomic():

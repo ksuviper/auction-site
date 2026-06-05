@@ -5,18 +5,12 @@ from datetime import date
 
 from django.db.models import Count, DecimalField, Sum
 from django.db.models.functions import Coalesce, ExtractMonth, ExtractYear
-from django.http import HttpResponseForbidden, StreamingHttpResponse
+from django.http import StreamingHttpResponse
 from django.shortcuts import render
 from django.views import View
 
+from .mixins import StaffRequiredMixin
 from .models import AuctionListing, Invoice
-
-
-class StaffRequiredMixin:
-    def dispatch(self, request, *args, **kwargs):
-        if not request.user.is_authenticated or not request.user.is_staff:
-            return HttpResponseForbidden('Staff access required.')
-        return super().dispatch(request, *args, **kwargs)
 
 
 class ReportsView(StaffRequiredMixin, View):
