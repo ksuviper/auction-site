@@ -232,17 +232,31 @@ profile. There is no partial access.
 `createsuperuser` starts unapproved like any other, and locking admins out would
 leave nobody able to approve anyone.
 
-Approving accounts, in the admin under **User profiles**:
+Where approval shows up in the admin:
 
-- Filter to **Is approved → No** for the review queue. The list shows each
-  user's registered email, since the username allauth derives at signup won't
-  identify anyone.
-- Flip the **Is approved** toggle inline, or select rows and run
-  **Approve selected account(s) and notify the user**. Either way the user is
-  emailed a sign-in link — the notification hangs off a `post_save` transition
-  in `auctions/signals.py`, not off the action, so both routes behave the same.
-- **Revoke approval for selected account(s)** reverses it, and also works as a
-  suspension. Revocation is silent; the user is not emailed.
+- **Users → Pending Approval** in the sidebar is the review queue, with a badge
+  showing how many accounts are waiting. Staff are excluded from both the badge
+  and the queue, so your own superuser account doesn't sit there forever. The
+  badge always renders, reading `0` when the queue is empty.
+- The **Users** list has an **Approval** column — *Awaiting approval*,
+  *Approved*, or *Exempt (staff)* — and a filter on approval state. Opening a
+  user shows an **Is approved** checkbox in their Profile section.
+- **Users → User Profiles** is the full list, with the registered email shown
+  (the username allauth derives at signup identifies nobody), an **Approval
+  status** filter, and an inline **Is approved** toggle.
+
+Three ways to approve, all equivalent:
+
+- Flip the **Is approved** toggle inline on the User profiles list.
+- Tick **Is approved** on a user's page.
+- Select rows and run **Approve selected account(s) and notify the user**.
+
+Each route emails the user a sign-in link — the notification hangs off a
+`post_save` transition in `auctions/signals.py` rather than the admin action, so
+all three behave identically.
+
+**Revoke approval for selected account(s)** reverses it, and also works as a
+suspension. Revocation is silent; the user is not emailed.
 
 `ADMIN_EMAIL` receives a "new account pending approval" message the moment a
 user confirms their email, so nobody sits in the queue unnoticed. With

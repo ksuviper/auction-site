@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 import os
 from pathlib import Path
 from django.urls import reverse_lazy
+from django.utils.text import format_lazy
 from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -354,6 +355,27 @@ UNFOLD = {
                         "title": "Users",
                         "icon": "person",
                         "link": reverse_lazy("admin:auth_user_changelist"),
+                    },
+                    {
+                        # The review queue for the admin-approval gate. The badge
+                        # counts accounts actually waiting (staff excluded) and
+                        # matches what this filtered link shows. It costs one
+                        # COUNT per admin page render, and shows '0' when the
+                        # queue is empty — unfold always renders a configured
+                        # badge.
+                        "title": "Pending Approval",
+                        "icon": "person_check",
+                        "link": format_lazy(
+                            "{}?approval=pending",
+                            reverse_lazy("admin:auctions_userprofile_changelist"),
+                        ),
+                        "badge": "auctions.admin.pending_approval_count",
+                        "badge_variant": "warning",
+                    },
+                    {
+                        "title": "User Profiles",
+                        "icon": "badge",
+                        "link": reverse_lazy("admin:auctions_userprofile_changelist"),
                     },
                     {
                         "title": "Subscriptions",

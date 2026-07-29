@@ -1,6 +1,7 @@
 from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+from django.db.models import Q
 from django.utils.html import mark_safe
 from unfold.admin import ModelAdmin, StackedInline, TabularInline
 from unfold.forms import (
@@ -50,6 +51,64 @@ class AuctionCategoryAdmin(ModelAdmin):
     list_filter = ('is_active',)
     search_fields = ('name',)
     exclude = ('slug',)
+
+
+def pending_approval(queryset):
+    """
+    Narrow ``queryset`` (of UserProfile) to accounts actually waiting on an admin.
+
+    Staff and superusers are excluded because the gate does not apply to them —
+    a superuser's own profile starts out is_approved=False and would otherwise
+    sit in the review queue forever. Shared by the changelist filter and the
+    sidebar badge so the two can never disagree.
+    """
+    return (
+        queryset.filter(is_approved=False)
+        .exclude(user__is_staff=True)
+        .exclude(user__is_superuser=True)
+    )
+
+
+def pending_approval_count(request):
+    """
+    Sidebar badge for the pending-approval queue (wired up in UNFOLD settings).
+
+    Always returns a string, including '0': unfold renders the badge whenever one
+    is configured, and falls back to printing the configured dotted path if the
+    callback is falsy.
+    """
+    return str(pending_approval(UserProfile.objects.all()).count())
+
+
+class ApprovalStatusFilter(admin.SimpleListFilter):
+    """
+    Approval filter that keeps staff out of the pending bucket.
+
+    A plain ``is_approved`` boolean filter would list every staff account under
+    "No", since nothing ever approves them.
+    """
+
+    title = 'approval status'
+    parameter_name = 'approval'
+
+    def lookups(self, request, model_admin):
+        return [
+            ('pending', 'Awaiting approval'),
+            ('approved', 'Approved'),
+            ('exempt', 'Staff — gate does not apply'),
+        ]
+
+    def queryset(self, request, queryset):
+        value = self.value()
+        if value == 'pending':
+            return pending_approval(queryset)
+        if value == 'approved':
+            return queryset.filter(is_approved=True)
+        if value == 'exempt':
+            return queryset.filter(
+                Q(user__is_staff=True) | Q(user__is_superuser=True)
+            )
+        return queryset
 
 
 @admin.action(description='Approve selected account(s) and notify the user')
@@ -108,7 +167,7 @@ class UserProfileAdmin(ModelAdmin):
         'user', 'user_email', 'is_approved', 'phone_number', 'subscription_required',
     )
     list_editable = ('is_approved', 'subscription_required')
-    list_filter = ('is_approved', 'subscription_required')
+    list_filter = (ApprovalStatusFilter, 'subscription_required')
     list_select_related = ('user',)
     search_fields = ('user__username', 'user__email', 'phone_number')
     raw_id_fields = ('user',)
@@ -321,7 +380,13 @@ class UserProfileInline(StackedInline):
     max_num = 1
     extra = 0
     verbose_name_plural = 'Profile'
-    fields = ('subscription_required', 'phone_number', 'country', 'address', 'notes')
+    # is_approved first: whether this person can log in at all is the most
+    # consequential thing on the page. Ticking it here emails them, same as the
+    # changelist action — see notify_user_of_approval in signals.py.
+    fields = (
+        'is_approved', 'subscription_required', 'phone_number', 'country',
+        'address', 'notes',
+    )
 
 
 # Replace the default auth User admin so the profile (and its
@@ -337,3 +402,17 @@ class CustomUserAdmin(BaseUserAdmin, ModelAdmin):
     add_form = UserCreationForm
     change_password_form = AdminPasswordChangeForm
     inlines = [UserProfileInline]
+    # Approval decides whether an account can log in, so it belongs on the list
+    # people actually browse — not only on the User profiles changelist.
+    list_display = BaseUserAdmin.list_display + ('approval_status',)
+    list_filter = BaseUserAdmin.list_filter + ('profile__is_approved',)
+    list_select_related = ('profile',)
+
+    @admin.display(description='Approval', ordering='profile__is_approved')
+    def approval_status(self, obj):
+        if obj.is_staff or obj.is_superuser:
+            return 'Exempt (staff)'
+        profile = getattr(obj, 'profile', None)
+        if profile is None:
+            return 'No profile'
+        return 'Approved' if profile.is_approved else 'Awaiting approval'

@@ -21,7 +21,16 @@ from django.core.cache import cache
 from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 
-from auctions.admin import UserProfileAdmin, approve_selected_users, revoke_approval
+from auctions.admin import (
+    ApprovalStatusFilter,
+    CustomUserAdmin,
+    UserProfileAdmin,
+    UserProfileInline,
+    approve_selected_users,
+    pending_approval,
+    pending_approval_count,
+    revoke_approval,
+)
 from auctions.models import UserProfile
 
 User = get_user_model()
@@ -304,7 +313,7 @@ class AdminApprovalActionTests(TestCase):
     def test_admin_exposes_approval_controls(self):
         self.assertIn('is_approved', self.model_admin.list_display)
         self.assertIn('is_approved', self.model_admin.list_editable)
-        self.assertIn('is_approved', self.model_admin.list_filter)
+        self.assertIn(ApprovalStatusFilter, self.model_admin.list_filter)
 
     def test_changelist_shows_the_registered_email(self):
         """Usernames are auto-derived; the email is what identifies a person."""
@@ -313,6 +322,110 @@ class AdminApprovalActionTests(TestCase):
         self.assertEqual(
             self.model_admin.user_email(user.profile), 'identify@example.com'
         )
+
+
+@override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
+class PendingQueueDiscoverabilityTests(TestCase):
+    """The approval queue has to be findable, not just present."""
+
+    def setUp(self):
+        cache.clear()
+        self.admin_user = make_user('queueboss@example.com', superuser=True)
+        self.client.force_login(self.admin_user)
+
+    def test_pending_queue_excludes_staff(self):
+        """A superuser's own profile starts unapproved; it is not a review item."""
+        waiting = make_user('waiting@example.com')
+        make_user('alsostaff@example.com', staff=True)
+        make_user('done@example.com', approved=True)
+
+        pks = set(pending_approval(UserProfile.objects.all()).values_list('pk', flat=True))
+
+        self.assertEqual(pks, {waiting.profile.pk})
+
+    def test_badge_count_matches_the_queue(self):
+        make_user('one@example.com')
+        make_user('two@example.com')
+        make_user('three@example.com', approved=True)
+
+        self.assertEqual(pending_approval_count(None), '2')
+
+    def test_badge_returns_a_string_when_empty(self):
+        """Unfold prints the configured dotted path if the callback is falsy."""
+        self.assertEqual(pending_approval_count(None), '0')
+
+    def test_sidebar_links_to_the_pending_queue(self):
+        from django.conf import settings
+
+        links = [
+            str(item.get('link', ''))
+            for group in settings.UNFOLD['SIDEBAR']['navigation']
+            for item in group['items']
+        ]
+        self.assertIn('/admin/auctions/userprofile/?approval=pending', links)
+        self.assertIn('/admin/auctions/userprofile/', links)
+
+    def test_sidebar_badge_path_is_importable(self):
+        """A bad dotted path is swallowed by unfold, so assert it resolves."""
+        from django.conf import settings
+        from django.utils.module_loading import import_string
+
+        badges = [
+            item['badge']
+            for group in settings.UNFOLD['SIDEBAR']['navigation']
+            for item in group['items']
+            if 'badge' in item
+        ]
+        self.assertTrue(badges)
+        for path in badges:
+            self.assertTrue(callable(import_string(path)))
+
+    def test_pending_filter_shows_only_waiting_accounts(self):
+        waiting = make_user('inqueue@example.com')
+        make_user('notinqueue@example.com', approved=True)
+
+        response = self.client.get(
+            '/admin/auctions/userprofile/?approval=pending',
+            REMOTE_ADDR='198.51.100.70',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        rows = response.context['cl'].result_list
+        self.assertEqual([r.pk for r in rows], [waiting.profile.pk])
+
+    def test_user_change_page_shows_approval(self):
+        target = make_user('inspectme@example.com')
+
+        response = self.client.get(f'/admin/auth/user/{target.pk}/change/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('is_approved', UserProfileInline.fields)
+        self.assertContains(response, 'is_approved')
+
+    def test_user_changelist_shows_approval_status(self):
+        user_admin = CustomUserAdmin(User, AdminSite())
+
+        self.assertIn('approval_status', user_admin.list_display)
+        self.assertEqual(
+            user_admin.approval_status(make_user('a@example.com')),
+            'Awaiting approval',
+        )
+        self.assertEqual(
+            user_admin.approval_status(make_user('b@example.com', approved=True)),
+            'Approved',
+        )
+        self.assertEqual(
+            user_admin.approval_status(make_user('c@example.com', staff=True)),
+            'Exempt (staff)',
+        )
+
+    def test_user_changelist_renders_with_the_new_column(self):
+        make_user('listed@example.com')
+
+        response = self.client.get('/admin/auth/user/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Awaiting approval')
 
 
 @override_settings(
