@@ -7,7 +7,7 @@ from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views import View
-from django.views.generic import DetailView, ListView, UpdateView
+from django.views.generic import DetailView, ListView, TemplateView, UpdateView
 
 from allauth.account.views import SignupView as AllauthSignupView
 from django_ratelimit.decorators import ratelimit
@@ -57,6 +57,18 @@ class RateLimitedSignupView(AllauthSignupView):
         # only ever renders on the email/password signup form.
         context['turnstile_site_key'] = settings.TURNSTILE_SITE_KEY
         return context
+
+
+class AccountPendingApprovalView(TemplateView):
+    """
+    Explains that an account is verified but still waiting on an admin.
+
+    Deliberately open to anonymous visitors: the whole point is that the user
+    cannot hold a session yet, so requiring a login would make the page
+    unreachable exactly when it is needed.
+    """
+
+    template_name = 'account/pending_approval.html'
 
 
 # ── Profile views ────────────────────────────────────────────────────────────

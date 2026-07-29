@@ -2,6 +2,7 @@ from django.urls import path
 
 from .invoice_views import InvoiceDetailView
 from .views import (
+    AccountPendingApprovalView,
     BuyNowView,
     CategoryListingView,
     ListingDetailView,
@@ -14,6 +15,11 @@ from .views import (
 )
 
 urlpatterns = [
+    path(
+        'accounts/pending-approval/',
+        AccountPendingApprovalView.as_view(),
+        name='account_pending_approval',
+    ),
     path('profile/', ProfileDetailView.as_view(), name='profile'),
     path('profile/edit/', ProfileUpdateView.as_view(), name='profile_edit'),
     path('category/<slug:slug>/', CategoryListingView.as_view(), name='category_listings'),

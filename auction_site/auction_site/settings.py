@@ -391,11 +391,17 @@ ACCOUNT_SESSION_REMEMBER = True
 # dead SMTP config nobody can complete registration at all.
 ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
 
-# Log the user in when they click the confirmation link, so they land straight
-# on profile completion (see AccountAdapter) instead of a dead-end page. allauth
-# only honours this when the pending sign-up is still in the session, so a link
-# opened in a different browser still requires a normal login.
-ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = True
+# Confirming the email link must NOT establish a session. Two reasons:
+#   * New accounts additionally need admin approval, so there is nothing useful
+#     to log them in to — AccountAdapter sends them to the pending-approval page
+#     instead.
+#   * More importantly, allauth logs in on confirmation by resuming the stashed
+#     sign-up through resume_login(), which does not call adapter.pre_login() —
+#     the hook the approval gate lives on. Leaving this True would hand an
+#     un-approved account a real session.
+# This is also allauth's own default, for the link-reuse reasons described in
+# allauth.account.internal.flows.email_verification.login_on_verification.
+ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = False
 
 # MFA Configuration
 MFA_SUPPORTED_AUTH_FORMS = [

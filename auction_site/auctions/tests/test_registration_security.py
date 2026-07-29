@@ -20,6 +20,14 @@ User = get_user_model()
 SIGNUP_URL = '/accounts/signup/'
 
 
+def approve(user):
+    """Clear the admin-approval gate so a test can isolate the other gates."""
+    profile = user.profile
+    profile.is_approved = True
+    profile.save(update_fields=['is_approved'])
+    return profile
+
+
 def signup_data(email, first='Jane', last='Doe'):
     return {
         'first_name': first,
@@ -268,7 +276,11 @@ class MandatoryEmailVerificationTests(TestCase):
         self.assertFalse(response.context['user'].is_authenticated)
 
     @patch('auctions.forms.verify_turnstile', return_value=True)
-    def test_verified_user_can_log_in(self, mock_verify):
+    def test_verified_and_approved_user_can_log_in(self, mock_verify):
+        """Verification is the gate under test — approval is granted separately.
+
+        Approval on its own is covered in test_account_approval.py.
+        """
         self.client.post(
             SIGNUP_URL,
             signup_data('verified@example.com'),
@@ -279,6 +291,7 @@ class MandatoryEmailVerificationTests(TestCase):
         address = EmailAddress.objects.get(email='verified@example.com')
         address.verified = True
         address.save(update_fields=['verified'])
+        approve(address.user)
 
         response = self.client.post(
             '/accounts/login/',
@@ -290,10 +303,8 @@ class MandatoryEmailVerificationTests(TestCase):
         self.assertTrue(response.context['user'].is_authenticated)
 
     @patch('auctions.forms.verify_turnstile', return_value=True)
-    def test_confirming_in_the_same_browser_lands_on_profile_completion(
-        self, mock_verify
-    ):
-        """The adapter should send a freshly confirmed user to profile setup."""
+    def test_confirming_lands_on_pending_approval(self, mock_verify):
+        """Verifying is the last step the user controls; approval comes next."""
         self.client.post(
             SIGNUP_URL,
             signup_data('confirmer@example.com'),
@@ -308,7 +319,7 @@ class MandatoryEmailVerificationTests(TestCase):
 
         self.assertRedirects(
             response,
-            reverse('profile_edit') + '?next=/',
+            reverse('account_pending_approval'),
             fetch_redirect_response=False,
         )
         self.assertTrue(
@@ -316,26 +327,46 @@ class MandatoryEmailVerificationTests(TestCase):
         )
 
     @patch('auctions.forms.verify_turnstile', return_value=True)
-    def test_confirming_from_another_browser_lands_on_login(self, mock_verify):
-        """No sign-up session to resume (e.g. link opened on a phone)."""
+    def test_confirming_never_establishes_a_session(self, mock_verify):
+        """ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION is off: no session, no bypass.
+
+        allauth's login-on-confirmation resumes the stashed sign-up through
+        resume_login(), which skips adapter.pre_login() — the hook the approval
+        gate lives on. Confirmation must not hand out a session.
+        """
         self.client.post(
             SIGNUP_URL,
-            signup_data('elsewhere@example.com'),
+            signup_data('nosession@example.com'),
             REMOTE_ADDR='198.51.100.44',
         )
 
-        confirmation = self._confirmation_for('elsewhere@example.com')
-        other_browser = self.client_class()
-        response = other_browser.post(
+        confirmation = self._confirmation_for('nosession@example.com')
+        self.client.post(
             reverse('account_confirm_email', args=[confirmation.key]),
-            REMOTE_ADDR='203.0.113.99',
+            REMOTE_ADDR='198.51.100.44',
+        )
+
+        home = self.client.get('/', REMOTE_ADDR='198.51.100.44')
+        self.assertFalse(home.context['user'].is_authenticated)
+
+    @patch('auctions.forms.verify_turnstile', return_value=True)
+    def test_already_approved_user_confirming_lands_on_login(self, mock_verify):
+        """An account past the approval gate gets allauth's default landing."""
+        self.client.post(
+            SIGNUP_URL,
+            signup_data('preapproved@example.com'),
+            REMOTE_ADDR='198.51.100.45',
+        )
+        approve(User.objects.get(email='preapproved@example.com'))
+
+        confirmation = self._confirmation_for('preapproved@example.com')
+        response = self.client.post(
+            reverse('account_confirm_email', args=[confirmation.key]),
+            REMOTE_ADDR='198.51.100.45',
         )
 
         self.assertRedirects(
             response, reverse('account_login'), fetch_redirect_response=False
-        )
-        self.assertTrue(
-            EmailAddress.objects.get(email='elsewhere@example.com').verified
         )
 
     def _confirmation_for(self, email):

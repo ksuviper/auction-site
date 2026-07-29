@@ -38,6 +38,10 @@ class UserProfile(models.Model):
         default=True,
         help_text='Uncheck to allow this user to bid without a PayPal subscription (admin override).',
     )
+    is_approved = models.BooleanField(
+        default=False,
+        help_text='Admin must approve new accounts before they can log in.',
+    )
 
     def __str__(self) -> str:
         return f'Profile – {self.user.username}'

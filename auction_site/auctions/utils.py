@@ -80,6 +80,35 @@ def has_active_subscription(user) -> bool:
     return False
 
 
+def needs_admin_approval(user) -> bool:
+    """
+    Return True if ``user`` may not log in yet because an admin has not
+    approved their account.
+
+    Staff and superusers are exempt: accounts made with ``createsuperuser`` (or
+    promoted in the admin) have no one above them to grant approval, and locking
+    them out would leave nobody able to approve anyone else.
+
+    A user with no profile row counts as unapproved. Profiles are created by a
+    post_save signal and the 0013 migration approved every profile that predates
+    the gate, so a missing profile means something unexpected happened — holding
+    the login is the safe reading.
+    """
+    if user is None:
+        return False
+    if user.is_staff or user.is_superuser:
+        return False
+
+    profile = getattr(user, 'profile', None)
+    if profile is None:
+        logger.warning(
+            'User %s has no profile row; treating as awaiting approval.', user.pk
+        )
+        return True
+
+    return not profile.is_approved
+
+
 def client_ip(request) -> str:
     """
     Best-effort client IP for the current request.

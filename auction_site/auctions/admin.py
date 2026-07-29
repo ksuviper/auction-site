@@ -1,4 +1,4 @@
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.utils.html import mark_safe
@@ -52,13 +52,70 @@ class AuctionCategoryAdmin(ModelAdmin):
     exclude = ('slug',)
 
 
+@admin.action(description='Approve selected account(s) and notify the user')
+def approve_selected_users(modeladmin, request, queryset):
+    """
+    Approve the selected accounts.
+
+    Saves each row one at a time rather than issuing a bulk update, because the
+    "you've been approved" email is sent by the post_save receiver in signals.py
+    — that way approving inline from the list view sends it too.
+    """
+    pending = list(queryset.filter(is_approved=False).select_related('user'))
+    if not pending:
+        modeladmin.message_user(
+            request,
+            'Nothing to do — every selected account was already approved.',
+            level=messages.INFO,
+        )
+        return
+
+    for profile in pending:
+        profile.is_approved = True
+        profile.save(update_fields=['is_approved'])
+
+    modeladmin.message_user(
+        request,
+        f'Approved {len(pending)} account(s); each has been emailed a sign-in link.',
+        level=messages.SUCCESS,
+    )
+
+
+@admin.action(description='Revoke approval for selected account(s)')
+def revoke_approval(modeladmin, request, queryset):
+    """
+    Undo a mistaken approval, or suspend an account.
+
+    Deliberately silent — the user is not emailed. Revocation is either an admin
+    correcting themselves or a moderation decision, and neither is improved by
+    an automated "your access was removed" message.
+    """
+    revoked = queryset.filter(is_approved=True).update(is_approved=False)
+    modeladmin.message_user(
+        request,
+        f'Revoked approval for {revoked} account(s). They can no longer log in.',
+        level=messages.WARNING if revoked else messages.INFO,
+    )
+
+
 @admin.register(UserProfile)
 class UserProfileAdmin(ModelAdmin):
-    list_display = ('user', 'phone_number', 'subscription_required')
-    list_editable = ('subscription_required',)
-    list_filter = ('subscription_required',)
+    actions = [approve_selected_users, revoke_approval]
+    # user_email is shown because the username allauth derives at signup (e.g.
+    # 'ada') is not something an admin can recognise a person by — the address
+    # they registered with is.
+    list_display = (
+        'user', 'user_email', 'is_approved', 'phone_number', 'subscription_required',
+    )
+    list_editable = ('is_approved', 'subscription_required')
+    list_filter = ('is_approved', 'subscription_required')
+    list_select_related = ('user',)
     search_fields = ('user__username', 'user__email', 'phone_number')
     raw_id_fields = ('user',)
+
+    @admin.display(description='Email', ordering='user__email')
+    def user_email(self, obj):
+        return obj.user.email or '—'
 
 
 @admin.register(Seller)

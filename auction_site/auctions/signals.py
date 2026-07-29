@@ -1,10 +1,13 @@
+from allauth.account.signals import email_confirmed
+from allauth.utils import build_absolute_uri
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 from django.urls import reverse
 
 from .models import ListingComment, UserProfile
-from .utils import _safe_send
+from .utils import _safe_send, needs_admin_approval
 
 User = get_user_model()
 
@@ -13,6 +16,97 @@ User = get_user_model()
 def create_user_profile(sender, instance, created, **kwargs):
     if created:
         UserProfile.objects.get_or_create(user=instance)
+
+
+@receiver(email_confirmed)
+def notify_admin_of_pending_approval(request, email_address, **kwargs):
+    """
+    Tell the admin there is a new account to review.
+
+    Fires the moment the user confirms their email — the last step they can take
+    on their own, and the point at which they start waiting on us. Accounts that
+    skip the approval gate (staff) raise nothing to review.
+    """
+    user = email_address.user
+    if not needs_admin_approval(user):
+        return
+
+    admin_email = getattr(settings, 'ADMIN_EMAIL', '')
+    if not admin_email:
+        return
+
+    review_link = reverse('admin:auctions_userprofile_changelist')
+    if request is not None:
+        review_link = request.build_absolute_uri(review_link)
+
+    display_name = user.get_full_name() or user.get_username()
+    body = f"""\
+{display_name} ({user.email}) has verified their email address and is waiting
+for approval before they can log in.
+
+Review and approve pending accounts here:
+{review_link}?is_approved__exact=0
+
+-- ASQ Daylily Auction System
+"""
+    _safe_send(
+        subject=f'New account pending approval: {user.email}',
+        body=body,
+        recipients=[admin_email],
+    )
+
+
+@receiver(pre_save, sender=UserProfile)
+def _stash_prev_profile_approval(sender, instance, **kwargs):
+    """Record the prior approval state so we can detect approve transitions."""
+    if instance.pk:
+        instance._prev_is_approved = bool(
+            sender.objects.filter(pk=instance.pk)
+            .values_list('is_approved', flat=True)
+            .first()
+        )
+    else:
+        instance._prev_is_approved = False
+
+
+@receiver(post_save, sender=UserProfile)
+def notify_user_of_approval(sender, instance, created, **kwargs):
+    """
+    Email the user when an admin approves their account.
+
+    Keyed on the False -> True transition rather than living in the admin action,
+    so approving inline from the changelist (``list_editable``) or from the
+    profile detail page notifies the user too. Fires once per transition.
+
+    Staff are skipped: they were never gated, so "your account is approved" would
+    only be confusing. Bulk ``.update()`` calls do not emit post_save, which is
+    why the 0013 backfill silently grandfathered existing members.
+    """
+    if not instance.is_approved or getattr(instance, '_prev_is_approved', False):
+        return
+
+    user = instance.user
+    if user.is_staff or user.is_superuser or not user.email:
+        return
+
+    login_url = build_absolute_uri(None, reverse('account_login'))
+    display_name = user.get_full_name() or user.get_username()
+    body = f"""\
+Hello {display_name},
+
+Your ASQ Daylily Auctions account has been approved. You can now log in and
+start using it.
+
+Sign in here:
+{login_url}
+
+-- ASQ Daylily Auction Group
+"""
+    _safe_send(
+        subject='Your ASQ Daylily Auctions account has been approved',
+        body=body,
+        recipients=[user.email],
+    )
 
 
 @receiver(pre_save, sender=ListingComment)

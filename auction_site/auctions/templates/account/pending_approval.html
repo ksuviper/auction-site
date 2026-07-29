@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}Account Pending Approval – ASQ Daylily Auctions{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-lg-7">
+
+    <div class="card shadow-sm">
+      <div class="card-body p-4 p-md-5 text-center fs-5" style="line-height:1.8;">
+
+        <i class="fas fa-user-clock fa-3x text-secondary mb-4"></i>
+
+        <h1 class="h3 fw-bold mb-3">Your account is awaiting approval</h1>
+
+        <p class="mb-4">
+          Thanks for confirming your email address. An administrator reviews
+          every new account by hand before it goes live, which keeps the auctions
+          free of spam registrations.
+        </p>
+
+        <p class="mb-4">
+          <strong>You don't need to do anything else.</strong> We'll email you as
+          soon as your account is approved, and you'll be able to sign in and
+          start bidding right away.
+        </p>
+
+        <p class="text-muted mb-4">
+          Approvals are usually handled within a day. If you haven't heard back
+          after that, email
+          <a href="mailto:asqdaylilies@gmail.com">asqdaylilies@gmail.com</a>
+          and we'll take a look.
+        </p>
+
+        <a href="{% url 'home' %}" class="btn btn-primary btn-lg fw-semibold">
+          <i class="fas fa-home me-2"></i>Browse the Auctions
+        </a>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

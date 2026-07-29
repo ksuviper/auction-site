@@ -21,6 +21,8 @@ and receive automated invoices when auctions close.
 - MFA support via allauth
 - Rate-limited login (5/min per IP), signup (5/hour per IP), and bid submission (10/min per user)
 - Mandatory email verification plus Cloudflare Turnstile on email/password signup
+- Manual admin approval before a new account can log in, with approval/revocation
+  actions in the admin (staff and superusers exempt)
 - Mobile-first Bootstrap 5 UI with offcanvas category sidebar
 
 ---
@@ -68,7 +70,9 @@ ALLOWED_HOSTS=localhost,127.0.0.1
 
 With `DEBUG=True` the default console email backend prints signup verification
 links straight to the terminal, and Cloudflare Turnstile is skipped when
-`TURNSTILE_SECRET` is unset — so registration works out of the box locally. See
+`TURNSTILE_SECRET` is unset — so registration works out of the box locally.
+Accounts you register locally still need approving before they can log in: tick
+**Is approved** for them in the admin under **User profiles**. See
 [Registration Security](#registration-security) before deploying.
 
 ### 5. Apply database migrations
@@ -114,7 +118,7 @@ Visit `http://localhost:8000`. Log in at `/admin/` with your superuser credentia
 | `EMAIL_HOST_USER` | No | — | SMTP username |
 | `EMAIL_HOST_PASSWORD` | No | — | SMTP password or app-specific password |
 | `DEFAULT_FROM_EMAIL` | No | — | From address for outgoing mail |
-| `ADMIN_EMAIL` | No | — | Receives auction-close summaries and no-bid notifications |
+| `ADMIN_EMAIL` | No | — | Receives auction-close summaries, no-bid notifications, and new-account approval requests |
 | `GOOGLE_CLIENT_ID` | No | — | Google OAuth2 client ID |
 | `GOOGLE_CLIENT_SECRET` | No | — | Google OAuth2 client secret |
 | `FACEBOOK_APP_ID` | No | — | Facebook Login app ID |
@@ -143,9 +147,17 @@ Visit `http://localhost:8000`. Log in at `/admin/` with your superuser credentia
 
 ## Registration Security
 
-Account creation via email/password is protected three ways. Social login
-(Google/Facebook) bypasses all three — the provider has already verified the
-address and runs its own bot protection.
+New accounts pass through four gates, in this order:
+
+1. **Cloudflare Turnstile** — proves a human filled in the form.
+2. **Per-IP rate limit** — caps how fast one connection can register.
+3. **Email verification** — proves the address is real and theirs.
+4. **Admin approval** — a person decides whether to let them in.
+
+Social login (Google/Facebook) skips 1–3: the provider has already verified the
+address and runs its own bot protection. It is still subject to gate 4.
+
+Staff and superusers are exempt from gate 4 entirely — see below.
 
 ### Mandatory email verification
 
@@ -161,9 +173,12 @@ why. Send yourself a test registration after any change to the mail config.
 verification mail through the same SMTP settings as the rest of the site's
 email, so there is no separate mail backend to configure.
 
-Clicking the link in the same browser that signed up logs the user in and drops
-them on profile completion. Opening it elsewhere (e.g. email read on a phone)
-verifies the address and sends them to the login page.
+Clicking the link verifies the address and lands the user on
+`/accounts/pending-approval/`. It deliberately does **not** establish a session
+(`ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = False`): allauth's login-on-confirmation
+resumes the stashed sign-up through `resume_login()`, which skips
+`adapter.pre_login()` — the hook the approval gate below lives on. Leaving it
+enabled would hand an un-approved account a real session.
 
 Membership gating is unaffected: `has_active_subscription()` is checked
 independently of verification status.
@@ -201,6 +216,46 @@ As a convenience, when `DEBUG=True` **and** `TURNSTILE_SECRET` is unset the
 check is skipped with a logged warning, so a fresh clone can register accounts
 without Cloudflare setup. With `DEBUG=False` a missing secret always fails
 closed.
+
+### Admin approval
+
+`UserProfile.is_approved` defaults to `False`, and
+`AccountAdapter.pre_login()` refuses to establish a session for an unapproved
+account — redirecting to `/accounts/pending-approval/` with an explanation
+instead. Because the gate sits in `pre_login()`, it covers **every** login path,
+email/password and social alike.
+
+An unapproved user cannot log in for any purpose, including completing their
+profile. There is no partial access.
+
+**Staff and superusers bypass the gate.** An account made with
+`createsuperuser` starts unapproved like any other, and locking admins out would
+leave nobody able to approve anyone.
+
+Approving accounts, in the admin under **User profiles**:
+
+- Filter to **Is approved → No** for the review queue. The list shows each
+  user's registered email, since the username allauth derives at signup won't
+  identify anyone.
+- Flip the **Is approved** toggle inline, or select rows and run
+  **Approve selected account(s) and notify the user**. Either way the user is
+  emailed a sign-in link — the notification hangs off a `post_save` transition
+  in `auctions/signals.py`, not off the action, so both routes behave the same.
+- **Revoke approval for selected account(s)** reverses it, and also works as a
+  suspension. Revocation is silent; the user is not emailed.
+
+`ADMIN_EMAIL` receives a "new account pending approval" message the moment a
+user confirms their email, so nobody sits in the queue unnoticed. With
+`ADMIN_EMAIL` unset the notification is skipped and pending accounts must be
+found by filtering the admin.
+
+#### Upgrading an existing site
+
+Migration `0013` approves every `UserProfile` that exists when it runs. Without
+that backfill a `False` default would lock out the entire current membership,
+paying subscribers included, at their next login. The gate therefore only
+applies to accounts created after the migration. This is a one-way door: if you
+roll back and re-apply, everyone registered in between is grandfathered too.
 
 ---
 
@@ -295,7 +350,7 @@ python manage.py test auctions.tests
 
 The suite covers subscription gating, the PayPal webhook handler, buy-now,
 proxy bidding, registration security (rate limiting, Turnstile, mandatory email
-verification), and end-to-end integration flows. PayPal API calls, Turnstile
+verification, admin approval), and end-to-end integration flows. PayPal API calls, Turnstile
 verification, and webhook signature verification are mocked, so no network or
 credentials are needed.
 
