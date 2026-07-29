@@ -1,12 +1,17 @@
 """Shared helpers for subscription gating (views, decorators, templates)."""
 
 import logging
+import os
 
+import requests
 from django.conf import settings
 from django.core.mail import send_mail
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
+
+TURNSTILE_VERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify'
+TURNSTILE_VERIFY_TIMEOUT = 5  # seconds; a signup POST should not hang on this
 
 
 def _safe_send(subject, body, recipients):
@@ -72,4 +77,77 @@ def has_active_subscription(user) -> bool:
     ):
         return True
 
+    return False
+
+
+def client_ip(request) -> str:
+    """
+    Best-effort client IP for the current request.
+
+    Reads REMOTE_ADDR only, matching what django-ratelimit's ``key='ip'`` uses,
+    so the rate limiter and Turnstile agree on who a caller is. Behind the nginx
+    config in README.md that is the real client address because nginx sets
+    X-Real-IP/X-Forwarded-For and gunicorn is trusted to forward them; if a
+    deployment ever terminates elsewhere, fix it in the proxy config rather than
+    trusting a client-supplied header here.
+    """
+    return request.META.get('REMOTE_ADDR', '') if request is not None else ''
+
+
+def verify_turnstile(token, remote_ip=None) -> bool:
+    """
+    Validate a Cloudflare Turnstile token server-side.
+
+    Returns True only when Cloudflare confirms the token. Anything else — no
+    token, a rejected token, a network error, an unparseable response — returns
+    False, so a broken or unreachable verification endpoint blocks signups
+    rather than silently waving bots through.
+
+    The one deliberate exception is local development: with DEBUG on and no
+    TURNSTILE_SECRET configured there is nothing to verify against, so the check
+    is skipped with a warning. With DEBUG off a missing secret still fails
+    closed — a production box that forgot the env var should break loudly, not
+    quietly lose its bot protection.
+    """
+    secret = os.getenv('TURNSTILE_SECRET', '')
+    if not secret:
+        if settings.DEBUG:
+            logger.warning(
+                'TURNSTILE_SECRET is not set; skipping Turnstile verification '
+                '(DEBUG is on). Set the Cloudflare test keys for local dev.'
+            )
+            return True
+        logger.error(
+            'TURNSTILE_SECRET is not set; refusing signup because the '
+            'verification check cannot be performed.'
+        )
+        return False
+
+    if not token:
+        return False
+
+    payload = {'secret': secret, 'response': token}
+    if remote_ip:
+        payload['remoteip'] = remote_ip
+
+    try:
+        response = requests.post(
+            TURNSTILE_VERIFY_URL,
+            data=payload,
+            timeout=TURNSTILE_VERIFY_TIMEOUT,
+        )
+        response.raise_for_status()
+        result = response.json()
+    except Exception:
+        logger.exception('Turnstile verification request failed; rejecting signup')
+        return False
+
+    if result.get('success') is True:
+        return True
+
+    # 'error-codes' never contains the secret, so it is safe to log.
+    logger.warning(
+        'Turnstile verification rejected a signup: %s',
+        result.get('error-codes', []),
+    )
     return False

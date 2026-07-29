@@ -19,7 +19,8 @@ and receive automated invoices when auctions close.
 - Admin reporting with Chart.js monthly revenue chart
 - Social login (Google, Facebook) via django-allauth
 - MFA support via allauth
-- Rate-limited login (5/min per IP) and bid submission (10/min per user)
+- Rate-limited login (5/min per IP), signup (5/hour per IP), and bid submission (10/min per user)
+- Mandatory email verification plus Cloudflare Turnstile on email/password signup
 - Mobile-first Bootstrap 5 UI with offcanvas category sidebar
 
 ---
@@ -64,6 +65,11 @@ SECRET_KEY=<generate with: python -c "import secrets; print(secrets.token_urlsaf
 DEBUG=True
 ALLOWED_HOSTS=localhost,127.0.0.1
 ```
+
+With `DEBUG=True` the default console email backend prints signup verification
+links straight to the terminal, and Cloudflare Turnstile is skipped when
+`TURNSTILE_SECRET` is unset — so registration works out of the box locally. See
+[Registration Security](#registration-security) before deploying.
 
 ### 5. Apply database migrations
 
@@ -126,10 +132,75 @@ Visit `http://localhost:8000`. Log in at `/admin/` with your superuser credentia
 | `CF_R2_SECRET_ACCESS_KEY` | No | — | R2 secret access key |
 | `CF_R2_BUCKET_NAME` | No | — | R2 bucket name for uploaded media |
 | `CF_R2_CUSTOM_DOMAIN` | No | — | Optional public domain serving the bucket |
+| `TURNSTILE_SITE_KEY` | Yes in production | — | Cloudflare Turnstile public site key; the widget is hidden when unset |
+| `TURNSTILE_SECRET` | Yes in production | — | Turnstile secret key. **With `DEBUG=False` and no secret, every email/password signup is rejected.** |
 | `SECURE_SSL_REDIRECT` | No | `False` | Set `True` in production behind HTTPS |
 | `SECURE_HSTS_SECONDS` | No | `0` | Set `31536000` after HTTPS is confirmed working |
 | `SECURE_HSTS_INCLUDE_SUBDOMAINS` | No | `False` | Extend HSTS to subdomains |
 | `SECURE_HSTS_PRELOAD` | No | `False` | Enable HSTS preload list eligibility |
+
+---
+
+## Registration Security
+
+Account creation via email/password is protected three ways. Social login
+(Google/Facebook) bypasses all three — the provider has already verified the
+address and runs its own bot protection.
+
+### Mandatory email verification
+
+`ACCOUNT_EMAIL_VERIFICATION = 'mandatory'`. A new account cannot log in — and
+therefore cannot bid, buy, or comment — until the confirmation link in its
+signup email is clicked.
+
+**This makes outbound email load-bearing.** If `EMAIL_BACKEND` and the
+`EMAIL_HOST*` credentials are wrong in production, signup emails never arrive
+and *every* new user is silently locked out, with nothing in the UI to explain
+why. Send yourself a test registration after any change to the mail config.
+`ADMIN_EMAIL` and `DEFAULT_FROM_EMAIL` should also be set — allauth sends the
+verification mail through the same SMTP settings as the rest of the site's
+email, so there is no separate mail backend to configure.
+
+Clicking the link in the same browser that signed up logs the user in and drops
+them on profile completion. Opening it elsewhere (e.g. email read on a phone)
+verifies the address and sends them to the login page.
+
+Membership gating is unaffected: `has_active_subscription()` is checked
+independently of verification status.
+
+### Per-IP signup rate limit
+
+`RateLimitedSignupView` allows **5 signup POSTs per hour per IP** and answers
+the sixth with a 403 rendered from `templates/403.html`. The view is registered
+ahead of `include('allauth.urls')` in `auction_site/urls.py` so it owns
+`/accounts/signup/`. Counters live in Django's cache, so restarting the server
+clears them — useful when testing locally.
+
+### Cloudflare Turnstile
+
+The signup form carries a Turnstile widget; the token is verified server-side by
+`verify_turnstile()` in `auctions/utils.py` before the account is created.
+
+Get keys from the [Cloudflare dashboard](https://dash.cloudflare.com) →
+**Turnstile** → **Add site**. The site key is public and lives in
+`TURNSTILE_SITE_KEY`; the secret goes in `TURNSTILE_SECRET` as a server
+environment variable and is never logged.
+
+Verification **fails closed** — an unreachable Cloudflare endpoint, a timeout,
+or a missing secret rejects the signup rather than letting it through.
+
+For local development, use Cloudflare's
+[test keys](https://developers.cloudflare.com/turnstile/troubleshooting/testing/):
+
+| Behaviour | Site key | Secret |
+|---|---|---|
+| Always passes | `1x00000000000000000000AA` | `1x0000000000000000000000000000000AA` |
+| Always blocks | `2x00000000000000000000AB` | `2x0000000000000000000000000000000AA` |
+
+As a convenience, when `DEBUG=True` **and** `TURNSTILE_SECRET` is unset the
+check is skipped with a logged warning, so a fresh clone can register accounts
+without Cloudflare setup. With `DEBUG=False` a missing secret always fails
+closed.
 
 ---
 
@@ -223,8 +294,10 @@ python manage.py test auctions.tests
 ```
 
 The suite covers subscription gating, the PayPal webhook handler, buy-now,
-proxy bidding, and end-to-end integration flows. PayPal API calls and webhook
-signature verification are mocked, so no network or credentials are needed.
+proxy bidding, registration security (rate limiting, Turnstile, mandatory email
+verification), and end-to-end integration flows. PayPal API calls, Turnstile
+verification, and webhook signature verification are mocked, so no network or
+credentials are needed.
 
 ---
 
@@ -291,6 +364,8 @@ EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
 EMAIL_HOST_USER=...
 EMAIL_HOST_PASSWORD=...
 ADMIN_EMAIL=...
+TURNSTILE_SITE_KEY=...
+TURNSTILE_SECRET=...
 PAYPAL_MODE=live
 PAYPAL_CLIENT_ID=...
 PAYPAL_CLIENT_SECRET=...

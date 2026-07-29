@@ -21,6 +21,8 @@ from django.contrib.staticfiles.views import serve as serve_static
 from django.urls import include, path
 from django.views.generic import RedirectView, TemplateView
 
+from auctions.views import RateLimitedSignupView
+
 from . import views
 
 urlpatterns = [
@@ -33,8 +35,11 @@ urlpatterns = [
     path('admin/weekly-setup/', include('auctions.weekly_setup_urls')),
     path('admin/reports/', include('auctions.reports_urls')),
     path('admin/', admin.site.urls),
-    # Rate-limited login must come before include('allauth.urls') so it matches first.
+    # Rate-limited login/signup must come before include('allauth.urls') so they
+    # match first — allauth registers the same URL names, and the resolver keeps
+    # the first pattern it finds.
     path('accounts/login/', views.RateLimitedLoginView.as_view(), name='account_login'),
+    path('accounts/signup/', RateLimitedSignupView.as_view(), name='account_signup'),
     path('accounts/', include('allauth.urls')),
     path('', include('auctions.subscription_urls')),
     path('', include('auctions.urls')),

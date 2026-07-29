@@ -3,9 +3,19 @@ from decimal import Decimal
 from django import forms
 
 from .models import UserProfile
+from .utils import client_ip, verify_turnstile
 
 
 class CustomSignupForm(forms.Form):
+    """
+    Extra fields mixed into allauth's signup forms via ACCOUNT_SIGNUP_FORM_CLASS.
+
+    allauth makes this class a base of *both* the email/password signup form and
+    the social signup form, so the Turnstile check below is opt-in: only
+    ``RateLimitedSignupView`` passes ``require_turnstile=True``. Social sign-ups
+    stay Turnstile-free — the provider does its own bot filtering.
+    """
+
     first_name = forms.CharField(
         max_length=30,
         required=True,
@@ -26,6 +36,30 @@ class CustomSignupForm(forms.Form):
         }),
         label='Last Name',
     )
+
+    # Populated by the Turnstile widget's JS callback. Not required at the field
+    # level — an empty token is rejected in clean() with a single friendly
+    # message instead of Django's generic "This field is required".
+    turnstile_token = forms.CharField(required=False, widget=forms.HiddenInput())
+
+    def __init__(self, *args, **kwargs):
+        # A plain Form has no access to the request, so the signup view hands it
+        # over; verify_turnstile needs it for the caller's IP.
+        self.request = kwargs.pop('request', None)
+        self.require_turnstile = kwargs.pop('require_turnstile', False)
+        super().__init__(*args, **kwargs)
+
+    def clean(self):
+        cleaned_data = super().clean()
+
+        if self.require_turnstile:
+            token = cleaned_data.get('turnstile_token')
+            if not verify_turnstile(token, client_ip(self.request)):
+                raise forms.ValidationError(
+                    'Please complete the verification check and try again.'
+                )
+
+        return cleaned_data
 
     def signup(self, request, user):
         user.first_name = self.cleaned_data['first_name']

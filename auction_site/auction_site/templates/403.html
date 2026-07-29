@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% comment %}
+Django renders this for any PermissionDenied. In this project that is raised by
+the per-IP rate limit on the signup form (see RateLimitedSignupView), so the
+copy is written for that case: calm and non-accusatory, since real people on a
+shared connection — a library, an office, a household — can trip the limit
+without doing anything wrong.
+{% endcomment %}
+
+{% block title %}Too Many Attempts – ASQ Daylily Auctions{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-lg-7">
+
+    <div class="card shadow-sm">
+      <div class="card-body p-4 p-md-5 text-center fs-5" style="line-height:1.8;">
+
+        <i class="fas fa-hourglass-half fa-3x text-secondary mb-4"></i>
+
+        <h1 class="h3 fw-bold mb-3">Too many signup attempts</h1>
+
+        <p class="mb-4">
+          Please try again in a bit. For everyone's safety we limit how many
+          accounts can be created from one internet connection each hour, and
+          this connection has reached that limit for now.
+        </p>
+
+        <p class="text-muted mb-4">
+          If you share a connection with other people — at a library, an office,
+          or with family — you may see this even on your first try. Waiting an
+          hour and starting again will work.
+        </p>
+
+        <div class="d-flex flex-column flex-sm-row gap-2 justify-content-center">
+          <a href="{% url 'home' %}" class="btn btn-primary btn-lg fw-semibold">
+            <i class="fas fa-home me-2"></i>Back to Auctions
+          </a>
+          <a href="{% url 'account_login' %}" class="btn btn-outline-secondary btn-lg">
+            <i class="fas fa-sign-in-alt me-2"></i>I already have an account
+          </a>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

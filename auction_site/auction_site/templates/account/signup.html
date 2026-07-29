@@ -100,8 +100,41 @@
   <div class="alert alert-danger mb-3">{{ form.non_field_errors|join:", " }}</div>
   {% endif %}
 
+  {% comment %}
+  Cloudflare Turnstile — email/password signup only. The social buttons above
+  post straight to the provider and never reach this form, so they stay
+  Turnstile-free (the providers run their own bot protection).
+  {% endcomment %}
+  {% if turnstile_site_key %}
+  <div class="mb-4 d-flex justify-content-center">
+    <div class="cf-turnstile"
+         data-sitekey="{{ turnstile_site_key }}"
+         data-callback="onTurnstileSuccess"
+         data-expired-callback="onTurnstileExpired"
+         data-error-callback="onTurnstileExpired"
+         data-size="flexible"
+         data-theme="light"></div>
+  </div>
+  {% endif %}
+  {{ form.turnstile_token }}
+
   <button type="submit" class="btn btn-primary btn-lg w-100 fw-semibold">
     <i class="fas fa-user-plus me-2"></i>Create Account
   </button>
 </form>
+{% endblock %}
+
+{% block extra_js %}
+{{ block.super }}
+{% if turnstile_site_key %}
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+<script>
+  function onTurnstileSuccess(token) {
+    document.getElementById('id_turnstile_token').value = token;
+  }
+  function onTurnstileExpired() {
+    document.getElementById('id_turnstile_token').value = '';
+  }
+</script>
+{% endif %}
 {% endblock %}

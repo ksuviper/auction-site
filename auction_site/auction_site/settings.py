@@ -385,7 +385,17 @@ ACCOUNT_LOGIN_METHODS = {'email'}
 ACCOUNT_SIGNUP_FIELDS = ['email*', 'password1*', 'password2*']
 ACCOUNT_SIGNUP_FORM_CLASS = 'auctions.forms.CustomSignupForm'
 ACCOUNT_SESSION_REMEMBER = True
-ACCOUNT_EMAIL_VERIFICATION = 'optional'
+
+# Email/password sign-ups must confirm their address before they can log in.
+# This requires working outbound email (see the EMAIL_* block below) — with a
+# dead SMTP config nobody can complete registration at all.
+ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
+
+# Log the user in when they click the confirmation link, so they land straight
+# on profile completion (see AccountAdapter) instead of a dead-end page. allauth
+# only honours this when the pending sign-up is still in the session, so a link
+# opened in a different browser still requires a normal login.
+ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = True
 
 # MFA Configuration
 MFA_SUPPORTED_AUTH_FORMS = [
@@ -447,6 +457,15 @@ PAYPAL_YEARLY_PLAN_ID = os.getenv('PAYPAL_YEARLY_PLAN_ID', '')
 PAYPAL_MONTHLY_PRICE = os.getenv('PAYPAL_MONTHLY_PRICE', '9.99')
 PAYPAL_YEARLY_PRICE = os.getenv('PAYPAL_YEARLY_PRICE', '99.99')
 PAYPAL_WEBHOOK_ID = os.getenv('PAYPAL_WEBHOOK_ID', '')
+
+# ============================================================================
+# Cloudflare Turnstile — bot protection on the email/password signup form
+# The secret is read from the environment on every verification call so it is
+# never held in a module-level constant; only the public site key lives here.
+# See README.md for the Cloudflare-provided always-pass/always-fail test keys.
+# ============================================================================
+
+TURNSTILE_SITE_KEY = os.getenv('TURNSTILE_SITE_KEY', '')
 
 # Redirect URLs
 LOGIN_REDIRECT_URL = '/'

@@ -8,6 +8,8 @@ from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.generic import DetailView, ListView, UpdateView
+
+from allauth.account.views import SignupView as AllauthSignupView
 from django_ratelimit.decorators import ratelimit
 
 from .forms import BidForm, CommentForm, ProfileUpdateForm, ProxyBidForm
@@ -23,6 +25,38 @@ from .models import (
 )
 from .services import run_proxy_bids
 from .utils import _safe_send, has_active_subscription
+
+
+# ── Registration ─────────────────────────────────────────────────────────────
+
+@method_decorator(
+    # block=True (unlike the bid views' block=False) so signup abuse hard-stops
+    # with a 403 instead of being flagged and allowed through.
+    ratelimit(key='ip', rate='5/h', method='POST', block=True),
+    name='post',
+)
+class RateLimitedSignupView(AllauthSignupView):
+    """
+    allauth's signup view plus per-IP throttling and Turnstile verification.
+
+    Registered ahead of include('allauth.urls') in the project URLconf so it
+    owns /accounts/signup/ — see auction_site/urls.py.
+    """
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        # CustomSignupForm only runs the Turnstile check when asked to, which
+        # keeps social signup (same form base class) free of it.
+        kwargs['request'] = self.request
+        kwargs['require_turnstile'] = True
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # Scoped to this page rather than a global context processor: the widget
+        # only ever renders on the email/password signup form.
+        context['turnstile_site_key'] = settings.TURNSTILE_SITE_KEY
+        return context
 
 
 # ── Profile views ────────────────────────────────────────────────────────────
