@@ -1,3 +1,4 @@
+from allauth.account.models import EmailAddress
 from allauth.account.signals import email_confirmed
 from allauth.utils import build_absolute_uri
 from django.conf import settings
@@ -16,6 +17,43 @@ User = get_user_model()
 def create_user_profile(sender, instance, created, **kwargs):
     if created:
         UserProfile.objects.get_or_create(user=instance)
+
+
+@receiver(post_save, sender=User)
+def verify_staff_email_on_creation(sender, instance, created, **kwargs):
+    """
+    Give a newly created staff account a verified email address.
+
+    ``createsuperuser`` predates allauth in the stack and leaves no EmailAddress
+    row behind, so with ACCOUNT_EMAIL_VERIFICATION = 'mandatory' a fresh
+    superuser cannot log in at /accounts/login/ and — being the person who would
+    normally fix such things — has no one to ask. Migration 0014 repairs accounts
+    that already existed; this keeps the next one from walking into it.
+
+    There is nothing to verify in the first place: the address was typed by
+    whoever had shell access (or by an existing admin adding a staff user), not
+    submitted by an anonymous visitor. Normal sign-ups are untouched — they are
+    created with is_staff False and go through allauth's confirmation flow.
+    """
+    if not created or not (instance.is_staff or instance.is_superuser):
+        return
+    if not instance.email:
+        return
+
+    # allauth's unique_verified_email constraint: one verified owner per address.
+    already_claimed = (
+        EmailAddress.objects.filter(email__iexact=instance.email, verified=True)
+        .exclude(user=instance)
+        .exists()
+    )
+    if already_claimed:
+        return
+
+    EmailAddress.objects.get_or_create(
+        user=instance,
+        email=instance.email,
+        defaults={'verified': True, 'primary': True},
+    )
 
 
 @receiver(email_confirmed)

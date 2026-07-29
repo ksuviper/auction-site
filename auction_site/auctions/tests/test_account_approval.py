@@ -48,8 +48,11 @@ def make_user(email, *, approved=False, staff=False, superuser=False):
         is_staff=staff or superuser,
         is_superuser=superuser,
     )
-    EmailAddress.objects.create(
-        user=user, email=email, verified=True, primary=True
+    # Staff accounts already have a verified row by the time we get here — the
+    # verify_staff_email_on_creation receiver adds one — so this has to be
+    # update_or_create, not create, or it trips unique_primary_email.
+    EmailAddress.objects.update_or_create(
+        user=user, email=email, defaults={'verified': True, 'primary': True}
     )
     # UserProfile is created by the post_save signal.
     profile = user.profile

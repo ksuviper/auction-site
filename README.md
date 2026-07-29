@@ -173,6 +173,10 @@ why. Send yourself a test registration after any change to the mail config.
 verification mail through the same SMTP settings as the rest of the site's
 email, so there is no separate mail backend to configure.
 
+Staff accounts get a verified address automatically at creation — see
+[Locked out?](#locked-out) below — because `createsuperuser` knows nothing about
+allauth and would otherwise leave the new superuser unable to log in.
+
 Clicking the link verifies the address and lands the user on
 `/accounts/pending-approval/`. It deliberately does **not** establish a session
 (`ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = False`): allauth's login-on-confirmation
@@ -263,13 +267,44 @@ user confirms their email, so nobody sits in the queue unnoticed. With
 `ADMIN_EMAIL` unset the notification is skipped and pending accounts must be
 found by filtering the admin.
 
+### Locked out?
+
+**Any staff account can always get in at `/admin/login/`.** That is Django's own
+login view, so neither the verification nor the approval gate applies. It still
+refuses non-staff accounts, so it is not a way around the gates — just a way in
+for the people who administer them.
+
+From the command line:
+
+```bash
+python manage.py unlock_account you@example.com            # verify the address
+python manage.py unlock_account you@example.com --approve  # and clear approval
+```
+
+It accepts a username too, creates the `EmailAddress` row if one is missing, and
+refuses to hand an address to a second account if another already has it
+verified. Use it when confirmation mail isn't arriving — a misconfigured SMTP
+setup makes every gate unrecoverable through the browser alone.
+
 #### Upgrading an existing site
 
-Migration `0013` approves every `UserProfile` that exists when it runs. Without
-that backfill a `False` default would lock out the entire current membership,
-paying subscribers included, at their next login. The gate therefore only
-applies to accounts created after the migration. This is a one-way door: if you
-roll back and re-apply, everyone registered in between is grandfathered too.
+Two migrations grandfather in accounts that predate these gates. Both are needed:
+the defaults are correct for new sign-ups but, applied to a populated database,
+would lock out the entire current membership — paying subscribers included — at
+their next login, with nothing in the UI explaining why.
+
+- **`0013`** approves every `UserProfile` that exists when it runs.
+- **`0014`** marks every existing account's email verified: rows left
+  `verified=False` from when verification was optional, plus `createsuperuser`
+  accounts that have no `EmailAddress` row at all. It respects allauth's
+  `unique_verified_email` constraint — if two accounts share an address, the
+  older one gets it and the newer is left unverified.
+
+Both are one-way doors: rolling back and re-applying grandfathers in everyone
+registered in between. `0014` also rubber-stamps any address a member never
+actually confirmed, which is the deliberate trade — evicting known members is
+worse. If a particular address looks suspicious, un-verify it in the admin under
+**Accounts → Email addresses** afterwards.
 
 ---
 
