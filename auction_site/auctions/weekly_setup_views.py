@@ -1,20 +1,11 @@
 from django.contrib import messages
-from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.views import View
 
+from .mixins import StaffRequiredMixin
 from .models import Seller
 from .weekly_setup_forms import WeeklyListingFormSet, WeeklySellerForm
-
-
-class StaffRequiredMixin:
-    def dispatch(self, request, *args, **kwargs):
-        if not request.user.is_authenticated or not request.user.is_staff:
-            return HttpResponseForbidden('Staff access required.')
-        return super().dispatch(request, *args, **kwargs)
-
-
-from django.views import View
 
 
 class WeeklySetupSellerView(StaffRequiredMixin, View):

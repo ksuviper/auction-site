@@ -29,6 +29,11 @@ def _run_deactivate_old_listings():
     call_command('deactivate_old_listings', verbosity=0)
 
 
+def _run_expire_lapsed_subscriptions():
+    from django.core.management import call_command
+    call_command('expire_lapsed_subscriptions', verbosity=0)
+
+
 def start():
     global _scheduler
     if _scheduler is not None and _scheduler.running:
@@ -63,10 +68,22 @@ def start():
             replace_existing=True,
         )
 
+        # Run daily at 02:00 local time to cancel memberships whose grace period
+        # has expired.
+        _scheduler.add_job(
+            _run_expire_lapsed_subscriptions,
+            trigger=CronTrigger(hour=2, minute=0),
+            id='expire_lapsed_subscriptions',
+            name='Cancel lapsed memberships past their grace period',
+            max_instances=1,
+            replace_existing=True,
+        )
+
         _scheduler.start()
         logger.info(
             'APScheduler started — "close_ended_auctions" every 5 min, '
-            '"deactivate_old_listings" every Monday 03:00.'
+            '"deactivate_old_listings" every Monday 03:00, '
+            '"expire_lapsed_subscriptions" daily 02:00.'
         )
     except Exception:
         logger.exception('Failed to start APScheduler.')

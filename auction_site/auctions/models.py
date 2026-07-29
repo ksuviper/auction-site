@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.text import slugify
 
@@ -33,6 +34,10 @@ class UserProfile(models.Model):
         help_text='2-letter country code, e.g. US',
     )
     notes = models.TextField(blank=True)
+    subscription_required = models.BooleanField(
+        default=True,
+        help_text='Uncheck to allow this user to bid without a PayPal subscription (admin override).',
+    )
 
     def __str__(self) -> str:
         return f'Profile – {self.user.username}'
@@ -43,6 +48,10 @@ class Seller(models.Model):
     email = models.EmailField(
         blank=True,
         help_text='Email address for auction-end notifications',
+    )
+    notify_on_comments = models.BooleanField(
+        default=True,
+        help_text='Email this seller when a buyer posts a question on their listing.',
     )
     bio = models.TextField(blank=True)
     accepted_payment_methods = models.TextField(
@@ -62,6 +71,11 @@ class Seller(models.Model):
 
 
 class AuctionListing(models.Model):
+    LISTING_TYPE_CHOICES = [
+        ('auction', 'Auction'),
+        ('buy_now', 'Buy It Now'),
+    ]
+
     title = models.CharField(max_length=255)
     category = models.ForeignKey(
         AuctionCategory,
@@ -82,6 +96,12 @@ class AuctionListing(models.Model):
     reserve_price = models.DecimalField(
         max_digits=9, decimal_places=2, null=True, blank=True
     )
+    listing_type = models.CharField(
+        max_length=8, choices=LISTING_TYPE_CHOICES, default='auction'
+    )
+    buy_now_price = models.DecimalField(
+        max_digits=9, decimal_places=2, null=True, blank=True
+    )
     starts_at = models.DateTimeField()
     ends_at = models.DateTimeField()
     is_active = models.BooleanField(default=True)
@@ -98,6 +118,15 @@ class AuctionListing(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+
+    def clean(self):
+        super().clean()
+        if self.listing_type == 'buy_now' and (
+            self.buy_now_price is None or self.buy_now_price <= 0
+        ):
+            raise ValidationError(
+                {'buy_now_price': 'Buy It Now listings require a price greater than 0.'}
+            )
 
     def __str__(self) -> str:
         return self.title
@@ -122,6 +151,28 @@ class Bid(models.Model):
 
     def __str__(self) -> str:
         return f'{self.bidder.username} – ${self.amount} on "{self.listing}"'
+
+
+class ProxyBid(models.Model):
+    listing = models.ForeignKey(
+        AuctionListing,
+        on_delete=models.CASCADE,
+        related_name='proxy_bids',
+    )
+    bidder = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='proxy_bids',
+    )
+    max_amount = models.DecimalField(max_digits=9, decimal_places=2)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [('listing', 'bidder')]
+
+    def __str__(self) -> str:
+        return f'{self.bidder.username} – max ${self.max_amount} on "{self.listing}"'
 
 
 class Invoice(models.Model):
@@ -169,6 +220,41 @@ class Invoice(models.Model):
         return f'Invoice #{self.pk} – {self.buyer.username} / {self.listing}'
 
 
+class ListingComment(models.Model):
+    listing = models.ForeignKey(
+        AuctionListing,
+        on_delete=models.CASCADE,
+        related_name='comments',
+    )
+    author = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='listing_comments',
+    )
+    body = models.TextField()
+    parent = models.ForeignKey(
+        'self',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='replies',
+    )
+    is_approved = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def save(self, *args, **kwargs):
+        # Replies inherit their parent's listing so admins only set the parent.
+        if self.parent_id and not self.listing_id:
+            self.listing = self.parent.listing
+        super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        return f'Comment by {self.author.username} on "{self.listing}"'
+
+
 class Wishlist(models.Model):
     user = models.ForeignKey(
         User,
@@ -183,3 +269,42 @@ class Wishlist(models.Model):
 
     def __str__(self) -> str:
         return f'{self.user.username} – "{self.listing_title_keyword}"'
+
+
+class Subscription(models.Model):
+    PLAN_CHOICES = [
+        ('monthly', 'Monthly'),
+        ('yearly', 'Yearly'),
+    ]
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('active', 'Active'),
+        ('lapsed', 'Lapsed'),
+        ('cancelled', 'Cancelled'),
+    ]
+
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='subscription',
+    )
+    plan = models.CharField(max_length=10, choices=PLAN_CHOICES)
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default='pending')
+    paypal_subscription_id = models.CharField(
+        max_length=100, unique=True, null=True, blank=True
+    )
+    paypal_plan_id = models.CharField(max_length=100, blank=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    current_period_end = models.DateTimeField(null=True, blank=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    grace_period_end = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Set to 3 days after current_period_end when a payment fails',
+    )
+
+    class Meta:
+        ordering = ['-id']
+
+    def __str__(self) -> str:
+        return f'{self.user.username} – {self.get_plan_display()} ({self.status})'

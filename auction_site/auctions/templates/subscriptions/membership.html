@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}My Membership – Above Status Quo{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-7">
+
+    <h1 class="fw-bold mb-4">My Membership</h1>
+
+    {% if in_grace %}
+    <div class="alert alert-danger fs-5" role="alert">
+      <i class="fas fa-triangle-exclamation me-2"></i>
+      <strong>Your payment failed.</strong>
+      You have access until
+      {{ subscription.grace_period_end|date:"F j, Y" }}.
+      Update your payment method in PayPal to keep your membership.
+      <div class="mt-2">
+        <a href="https://www.paypal.com/myaccount/autopay/" target="_blank" rel="noopener"
+           class="alert-link">Manage payment methods in PayPal →</a>
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="card shadow-sm mb-4">
+      <div class="card-body p-4">
+        <dl class="row mb-0 fs-5">
+          <dt class="col-sm-4">Plan</dt>
+          <dd class="col-sm-8">{{ subscription.get_plan_display }}</dd>
+
+          <dt class="col-sm-4">Status</dt>
+          <dd class="col-sm-8">
+            {% if subscription.status == 'active' %}
+            <span class="badge bg-success">Active</span>
+            {% elif subscription.status == 'lapsed' %}
+            <span class="badge bg-warning text-dark">Lapsed</span>
+            {% elif subscription.status == 'cancelled' %}
+            <span class="badge bg-secondary">Cancelled</span>
+            {% else %}
+            <span class="badge bg-info text-dark">{{ subscription.get_status_display }}</span>
+            {% endif %}
+          </dd>
+
+          {% if subscription.status == 'cancelled' %}
+          <dt class="col-sm-4">Access until</dt>
+          <dd class="col-sm-8">
+            {{ subscription.current_period_end|date:"F j, Y"|default:"—" }}
+          </dd>
+          {% else %}
+          <dt class="col-sm-4">Next renewal</dt>
+          <dd class="col-sm-8">
+            {{ subscription.current_period_end|date:"F j, Y"|default:"—" }}
+          </dd>
+          {% endif %}
+        </dl>
+      </div>
+    </div>
+
+    {% if can_cancel %}
+    <form method="post" action="{% url 'membership_cancel' %}"
+          onsubmit="return confirm('Cancel your membership? You will keep access until the end of your current period.');">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-outline-danger btn-lg">
+        <i class="fas fa-ban me-2"></i>Cancel membership
+      </button>
+    </form>
+    {% elif can_resubscribe %}
+    <a href="{% url 'subscribe' %}" class="btn btn-primary btn-lg">
+      <i class="fas fa-rotate-right me-2"></i>Resubscribe
+    </a>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}

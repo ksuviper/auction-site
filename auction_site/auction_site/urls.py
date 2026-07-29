@@ -36,6 +36,7 @@ urlpatterns = [
     # Rate-limited login must come before include('allauth.urls') so it matches first.
     path('accounts/login/', views.RateLimitedLoginView.as_view(), name='account_login'),
     path('accounts/', include('allauth.urls')),
+    path('', include('auctions.subscription_urls')),
     path('', include('auctions.urls')),
 ]
 
