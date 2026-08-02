@@ -42,6 +42,15 @@ class UserProfile(models.Model):
         default=False,
         help_text='Admin must approve new accounts before they can log in.',
     )
+    email_login_code_enabled = models.BooleanField(
+        default=True,
+        help_text=(
+            'Require an emailed one-time code at login (in addition to '
+            'password). Staff cannot disable this. Ignored if the user has an '
+            'authenticator app (TOTP) configured — TOTP replaces the email '
+            'code step.'
+        ),
+    )
 
     def __str__(self) -> str:
         return f'Profile – {self.user.username}'

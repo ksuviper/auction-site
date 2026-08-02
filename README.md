@@ -18,7 +18,8 @@ and receive automated invoices when auctions close.
 - Invoice management dashboard with CSV export
 - Admin reporting with Chart.js monthly revenue chart
 - Social login (Google, Facebook) via django-allauth
-- MFA support via allauth
+- Two-factor authentication: emailed login code by default for everyone
+  (mandatory for staff), optional authenticator app (TOTP) with recovery codes
 - Rate-limited login (5/min per IP), signup (5/hour per IP), and bid submission (10/min per user)
 - Mandatory email verification plus Cloudflare Turnstile on email/password signup
 - Manual admin approval before a new account can log in, with approval/revocation
@@ -142,6 +143,79 @@ Visit `http://localhost:8000`. Log in at `/admin/` with your superuser credentia
 | `SECURE_HSTS_SECONDS` | No | `0` | Set `31536000` after HTTPS is confirmed working |
 | `SECURE_HSTS_INCLUDE_SUBDOMAINS` | No | `False` | Extend HSTS to subdomains |
 | `SECURE_HSTS_PRELOAD` | No | `False` | Enable HSTS preload list eligibility |
+
+---
+
+## Two-Factor Authentication
+
+**Every password login also requires a one-time code emailed to the user.** It is
+on by default for everyone, staff included.
+
+- **Members may turn it off** under *Login & Security* (`/account/security/`),
+  leaving them password-only.
+- **Staff and superusers cannot.** This is enforced in
+  `AccountAdapter.is_login_by_code_required()`, not by hiding the control — so
+  clearing the flag directly in the database or the Django admin changes nothing.
+  That single check is the whole of the "mandatory 2FA for staff" requirement.
+- **An authenticator app replaces the email code.** Any user can set up TOTP
+  (plus recovery codes) from the same page. Once active they are challenged by
+  the app instead; the two prompts never stack, because allauth's login-by-code
+  stage runs *before* its MFA stage and the adapter suppresses the code when the
+  MFA stage is going to challenge.
+- **Social login is untouched** — no code, no app prompt — matching how Turnstile
+  and mandatory email verification are scoped to the password path.
+- **Sign-up is untouched.** A brand-new account is not asked for a login code
+  before it has confirmed the address the code would go to; email verification
+  comes first, as before.
+
+allauth's MFA pages live under `/accounts/2fa/` (not `/accounts/mfa/`).
+
+### Settings
+
+| Setting | Value | Why |
+|---|---|---|
+| `ACCOUNT_LOGIN_BY_CODE_REQUIRED` | `{'password'}` | Requires the code for password logins only. A set, not `True`, so social logins are exempt. |
+| `ACCOUNT_LOGIN_BY_CODE_ENABLED` | *unset (off)* | Deliberate. This is a different feature — "email me a code **instead of** my password", i.e. passwordless login. We want the code as a second factor. |
+| `ACCOUNT_EMAIL_SUBJECT_PREFIX` | `''` | allauth otherwise prefixes every subject with `[example.com]`, taken from the unconfigured Sites record. |
+| `MFA_SUPPORTED_TYPES` | `['totp', 'recovery_codes']` | allauth's default, pinned because the login flow depends on which types exist. |
+| `MFA_ALLOW_UNVERIFIED_EMAIL` | `False` | Consistent with mandatory email verification. |
+| `MFA_TOTP_ISSUER` | `ASQ Daylily Auctions` | Name shown in the user's authenticator app; otherwise it reads `example.com`. |
+
+`UserProfile.email_login_code_enabled` (default `True`) holds the per-user
+preference. It is ignored for staff, and ignored for anyone with an
+authenticator app.
+
+### Before this goes live
+
+**Log in as a staff account immediately after deploying.** The email code is
+mandatory for staff and cannot be skipped, so a broken SMTP configuration locks
+every administrator out of `/accounts/login/`. `/admin/login/` still works (see
+[Locked out?](#locked-out)) — that is the recovery path if codes are not
+arriving.
+
+Existing members get `email_login_code_enabled = True`, so **everyone needs
+working email to sign in** from the moment this deploys, not just new
+registrations.
+
+### Branding allauth's pages
+
+Rather than copying allauth's page templates, the project overrides:
+
+- `templates/allauth/layouts/entrance.html` and `manage.html` — bridge allauth's
+  standalone document into the site's own `base.html`.
+- `templates/allauth/elements/*.html` — allauth renders all of its UI through
+  these primitives (`button`, `field`, `fields`, `form`, `panel`, `h1`, …), so
+  overriding them applies Bootstrap to every allauth page at once.
+- `templates/account/email/login_code_*.txt` — the code email, subject included,
+  so it reads as recognisably from this site.
+
+Because none of allauth's functional markup is duplicated, these survive allauth
+upgrades. **Do not override an allauth `base_*.html` template with a bare
+wrapper** — those files contain the forms. Doing exactly that to
+`account/base_confirm_code.html` once produced a login-code page with no code
+field and no submit button: a 200 response nobody could log in through.
+`auctions/tests/test_security_settings.py` asserts on rendered markup to catch a
+repeat.
 
 ---
 
@@ -399,7 +473,8 @@ python manage.py test auctions.tests
 
 The suite covers subscription gating, the PayPal webhook handler, buy-now,
 proxy bidding, registration security (rate limiting, Turnstile, mandatory email
-verification, admin approval), and end-to-end integration flows. PayPal API calls, Turnstile
+verification, admin approval, two-factor authentication), and end-to-end
+integration flows. PayPal API calls, Turnstile
 verification, and webhook signature verification are mocked, so no network or
 credentials are needed.
 

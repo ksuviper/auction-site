@@ -425,10 +425,44 @@ ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
 # allauth.account.internal.flows.email_verification.login_on_verification.
 ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = False
 
-# MFA Configuration
-MFA_SUPPORTED_AUTH_FORMS = [
-    'allauth.mfa.totp.forms.ActivateTOTPForm',
-]
+# ----------------------------------------------------------------------------
+# Two-factor authentication
+#
+# Every password login also requires a one-time code emailed to the user. Set to
+# {'password'} rather than True so social logins are unaffected, matching how
+# Turnstile and mandatory email verification are scoped.
+#
+# NOT to be confused with ACCOUNT_LOGIN_BY_CODE_ENABLED, which is deliberately
+# left off: that adds a "email me a code instead of my password" option, i.e.
+# passwordless login. We want the code as a *second* factor, not an alternative
+# to the password.
+#
+# AccountAdapter.is_login_by_code_required() then narrows this per user: staff
+# can never opt out, other users can, and anyone with an authenticator app is
+# challenged by that instead so two prompts never stack.
+# ----------------------------------------------------------------------------
+
+ACCOUNT_LOGIN_BY_CODE_REQUIRED = {'password'}
+
+# allauth prefixes every subject with "[<site name>] " by default, which here
+# renders as "[example.com] ..." because the django.contrib.sites record is
+# unconfigured. Drop it: the subjects already name the site, and a bracketed
+# domain in front of a login code reads like spam.
+ACCOUNT_EMAIL_SUBJECT_PREFIX = ''
+
+# Authenticator app (TOTP) plus recovery codes, opt-in per user via
+# /account/security/. These are allauth's defaults, pinned explicitly because
+# the login flow depends on which types exist.
+MFA_SUPPORTED_TYPES = ['totp', 'recovery_codes']
+
+# Require a verified email before MFA can be set up, consistent with mandatory
+# email verification above.
+MFA_ALLOW_UNVERIFIED_EMAIL = False
+
+# Name shown for this account inside the user's authenticator app. Without it
+# allauth falls back to the django.contrib.sites name, which is 'example.com'
+# until the Site record is configured.
+MFA_TOTP_ISSUER = 'ASQ Daylily Auctions'
 
 # Social account settings
 SOCIALACCOUNT_AUTO_SIGNUP = True

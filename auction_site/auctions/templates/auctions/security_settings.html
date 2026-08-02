@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+
+{% block title %}Login &amp; Security – ASQ Daylily Auctions{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-lg-8">
+
+    <h1 class="fw-bold mb-1">Login &amp; Security</h1>
+    <p class="text-muted mb-4">How we confirm it's really you when you sign in</p>
+
+    <!-- Emailed login code -->
+    <div class="card shadow-sm mb-4">
+      <div class="card-body p-4 fs-5" style="line-height:1.8;">
+
+        <h2 class="h5 fw-bold mb-3">
+          <i class="fas fa-envelope me-2" aria-hidden="true"></i>Emailed login code
+        </h2>
+
+        <p class="mb-3">
+          Status:
+          {% if profile.email_login_code_enabled %}
+          <span class="badge bg-success fs-6">On</span>
+          {% else %}
+          <span class="badge bg-secondary fs-6">Off</span>
+          {% endif %}
+        </p>
+
+        {% if profile.email_login_code_enabled %}
+        <p>
+          Each time you sign in, we email you a short code and ask you to type it
+          in. It means someone who learns your password still can't get into your
+          account without also reading your email.
+        </p>
+        {% else %}
+        <p>
+          You currently sign in with your password alone. Turning codes on adds a
+          second step that protects your account if your password is ever
+          guessed or leaked.
+        </p>
+        {% endif %}
+
+        {% if email_code_locked %}
+        <div class="alert alert-secondary mb-0" role="note">
+          <i class="fas fa-lock me-2" aria-hidden="true"></i>
+          Staff accounts require this and cannot disable it.
+        </div>
+        {% elif totp_active %}
+        <div class="alert alert-info mb-0" role="note">
+          <i class="fas fa-circle-info me-2" aria-hidden="true"></i>
+          You have an authenticator app set up, so we ask for a code from that
+          app instead of emailing one. This setting takes effect again if you
+          remove the app.
+        </div>
+        {% else %}
+        <form method="post" action="{% url 'toggle_email_login_code' %}">
+          {% csrf_token %}
+          {% if profile.email_login_code_enabled %}
+          <button type="submit" class="btn btn-outline-secondary btn-lg fw-semibold">
+            Turn off login codes
+          </button>
+          {% else %}
+          <button type="submit" class="btn btn-primary btn-lg fw-semibold">
+            <i class="fas fa-shield-halved me-2" aria-hidden="true"></i>Turn on login codes
+          </button>
+          {% endif %}
+        </form>
+        {% endif %}
+
+      </div>
+    </div>
+
+    <!-- Authenticator app -->
+    <div class="card shadow-sm mb-4">
+      <div class="card-body p-4 fs-5" style="line-height:1.8;">
+
+        <h2 class="h5 fw-bold mb-3">
+          <i class="fas fa-mobile-screen me-2" aria-hidden="true"></i>Authenticator app
+        </h2>
+
+        <p class="mb-3">
+          Status:
+          {% if totp_active %}
+          <span class="badge bg-success fs-6">Enabled</span>
+          {% else %}
+          <span class="badge bg-secondary fs-6">Not set up</span>
+          {% endif %}
+        </p>
+
+        {% if totp_active %}
+        <p>
+          You're using an authenticator app for sign-in codes. <strong>If you set
+          up an authenticator app, you'll be asked for a code from that app
+          instead of an emailed code.</strong>
+        </p>
+        <div class="d-flex flex-column flex-sm-row gap-2">
+          <a href="{% url 'mfa_index' %}" class="btn btn-outline-secondary btn-lg">
+            <i class="fas fa-gear me-2" aria-hidden="true"></i>Manage
+          </a>
+          {% if recovery_codes_active %}
+          <a href="{% url 'mfa_view_recovery_codes' %}" class="btn btn-outline-secondary btn-lg">
+            <i class="fas fa-key me-2" aria-hidden="true"></i>Recovery codes
+          </a>
+          {% else %}
+          <a href="{% url 'mfa_generate_recovery_codes' %}" class="btn btn-outline-secondary btn-lg">
+            <i class="fas fa-key me-2" aria-hidden="true"></i>Create recovery codes
+          </a>
+          {% endif %}
+        </div>
+        {% else %}
+        <p>
+          An app on your phone — such as Google Authenticator or Authy — shows a
+          fresh code every 30 seconds. It's a stronger alternative to emailed
+          codes and works even when your email doesn't.
+        </p>
+        <p class="text-muted">
+          <strong>If you set up an authenticator app, you'll be asked for a code
+          from that app instead of an emailed code.</strong> You'll never be asked
+          for both.
+        </p>
+        <a href="{% url 'mfa_activate_totp' %}" class="btn btn-primary btn-lg fw-semibold">
+          <i class="fas fa-qrcode me-2" aria-hidden="true"></i>Set up an authenticator app
+        </a>
+        {% endif %}
+
+      </div>
+    </div>
+
+    <p class="text-muted">
+      Signing in with Google or Facebook? Those services handle this step
+      themselves, so none of the above applies to that way of signing in.
+    </p>
+
+  </div>
+</div>
+{% endblock %}

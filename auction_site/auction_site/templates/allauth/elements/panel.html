@@ -1,0 +1,20 @@
+{% comment %}
+Overrides allauth/elements/panel.html as a Bootstrap card, matching the cards
+used on the project's own account pages.
+{% endcomment %}
+{% load allauth %}
+<section class="card shadow-sm mb-4">
+    <div class="card-body p-4">
+        <h2 class="h5 fw-bold mb-3">
+            {% slot title %}
+            {% endslot %}
+        </h2>
+        {% slot body %}
+        {% endslot %}
+        {% if slots.actions %}
+            <div class="d-flex flex-column flex-sm-row gap-2 mt-3">
+                {% for action in slots.actions %}{{ action }}{% endfor %}
+            </div>
+        {% endif %}
+    </div>
+</section>

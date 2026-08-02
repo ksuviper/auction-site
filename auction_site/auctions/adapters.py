@@ -68,3 +68,66 @@ class AccountAdapter(DefaultAccountAdapter):
             return redirect('account_pending_approval')
 
         return None
+
+    def is_login_by_code_required(self, login) -> bool:
+        """
+        Decide whether this login needs the emailed one-time code.
+
+        Note the signature: allauth 65 passes a ``Login`` object here, not a
+        user. It is called from LoginByCodeStage, which is the *first* login
+        stage — ahead of the MFA stage — so at this point the only recorded
+        authentication method is the password.
+
+        Policy, in order:
+
+        1. An authenticator app replaces the email code. LoginByCodeStage runs
+           before mfa's AuthenticateStage, so without this branch a user with
+           TOTP would be asked for an emailed code *and then* an app code. The
+           condition mirrors AuthenticateStage._should_handle exactly, so the
+           rule is really "if the MFA stage is going to challenge, don't also
+           email a code" — which stays correct if WebAuthn is enabled later.
+        2. super() applies ACCOUNT_LOGIN_BY_CODE_REQUIRED = {'password'}, which
+           is what keeps social logins out of this, and short-circuits a login
+           that already happened by code.
+        3. Staff and superusers always get the code. This is the whole of the
+           "mandatory MFA for staff" requirement — enforced here on every login
+           rather than by a separate gate, so flipping the profile flag directly
+           in the database or the admin changes nothing.
+        4. Everyone else gets their profile preference, which defaults to on.
+        """
+        # Imported inside the method: allauth.mfa models pull in the app
+        # registry, and this module is imported while settings are still loading.
+        from allauth.mfa.models import Authenticator
+        from allauth.mfa.utils import is_mfa_enabled
+
+        user = login.user
+        if user is None:
+            return super().is_login_by_code_required(login)
+
+        if login.signup:
+            # The login attempt sign-up itself makes. There is no authentication
+            # method on record yet, which allauth's default reads as "unknown,
+            # require a code" — fail-secure in general, but wrong here: it would
+            # ask a brand-new account for a login code *before* it has confirmed
+            # the address that code would be sent to, and ahead of the email
+            # verification stage that should come next. The code is a second
+            # factor for signing in, not a registration step.
+            return False
+
+        if is_mfa_enabled(
+            user, [Authenticator.Type.TOTP, Authenticator.Type.WEBAUTHN]
+        ):
+            return False
+
+        if not super().is_login_by_code_required(login):
+            return False
+
+        if user.is_staff or user.is_superuser:
+            return True
+
+        profile = getattr(user, 'profile', None)
+        if profile is None:
+            # No preference on record; fall back to the secure default.
+            return True
+
+        return profile.email_login_code_enabled

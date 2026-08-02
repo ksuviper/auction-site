@@ -11,7 +11,9 @@ from .views import (
     PostCommentView,
     ProfileDetailView,
     ProfileUpdateView,
+    SecuritySettingsView,
     SellerListingView,
+    ToggleEmailLoginCodeView,
 )
 
 urlpatterns = [
@@ -22,6 +24,12 @@ urlpatterns = [
     ),
     path('profile/', ProfileDetailView.as_view(), name='profile'),
     path('profile/edit/', ProfileUpdateView.as_view(), name='profile_edit'),
+    path('account/security/', SecuritySettingsView.as_view(), name='security_settings'),
+    path(
+        'account/security/toggle-email-code/',
+        ToggleEmailLoginCodeView.as_view(),
+        name='toggle_email_login_code',
+    ),
     path('category/<slug:slug>/', CategoryListingView.as_view(), name='category_listings'),
     path('seller/<int:pk>/', SellerListingView.as_view(), name='seller_listings'),
     path('listing/<int:pk>/', ListingDetailView.as_view(), name='listing_detail'),

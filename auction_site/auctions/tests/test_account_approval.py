@@ -32,6 +32,7 @@ from auctions.admin import (
     revoke_approval,
 )
 from auctions.models import UserProfile
+from auctions.tests.utils import sign_in
 
 User = get_user_model()
 
@@ -67,12 +68,8 @@ class ApprovalGateTests(TestCase):
         cache.clear()
 
     def _login(self, email):
-        return self.client.post(
-            LOGIN_URL,
-            {'login': email, 'password': PASSWORD},
-            REMOTE_ADDR='198.51.100.60',
-            follow=True,
-        )
+        """Full login, code step included — see auctions.tests.utils.sign_in."""
+        return sign_in(self.client, email, PASSWORD, ip='198.51.100.60')
 
     def test_unapproved_user_is_redirected_to_pending_approval(self):
         make_user('pending@example.com')
@@ -246,11 +243,8 @@ class AdminApprovalActionTests(TestCase):
             UserProfile.objects.filter(user=user),
         )
 
-        response = self.client.post(
-            LOGIN_URL,
-            {'login': 'thenlogin@example.com', 'password': PASSWORD},
-            REMOTE_ADDR='198.51.100.61',
-            follow=True,
+        response = sign_in(
+            self.client, 'thenlogin@example.com', PASSWORD, ip='198.51.100.61'
         )
         self.assertTrue(response.context['user'].is_authenticated)
 

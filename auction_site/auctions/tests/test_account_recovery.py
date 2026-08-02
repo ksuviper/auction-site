@@ -22,6 +22,7 @@ from django.core.management.base import CommandError
 from django.test import TestCase, override_settings
 
 from auctions.models import UserProfile
+from auctions.tests.utils import sign_in
 
 User = get_user_model()
 
@@ -81,12 +82,8 @@ class SuperuserLockoutTests(TestCase):
             username='root', email='root@example.com', password=PASSWORD
         )
 
-        response = self.client.post(
-            LOGIN_URL,
-            {'login': 'root@example.com', 'password': PASSWORD},
-            REMOTE_ADDR='198.51.100.80',
-            follow=True,
-        )
+        response = sign_in(self.client, 'root@example.com', PASSWORD,
+                           ip='198.51.100.80')
 
         self.assertTrue(logged_in(self.client))
         self.assertTrue(response.context['user'].is_authenticated)
@@ -166,11 +163,8 @@ class Migration0014Tests(TestCase):
 
         run_migration_0014()
 
-        self.client.post(
-            LOGIN_URL,
-            {'login': 'canlogin@example.com', 'password': PASSWORD},
-            REMOTE_ADDR='198.51.100.81',
-        )
+        sign_in(self.client, 'canlogin@example.com', PASSWORD,
+                ip='198.51.100.81')
         self.assertTrue(logged_in(self.client))
 
     def test_user_with_no_email_row_gets_one(self):
@@ -287,12 +281,8 @@ class UnlockAccountCommandTests(TestCase):
         user.profile.refresh_from_db()
         self.assertTrue(user.profile.is_approved)
 
-        response = self.client.post(
-            LOGIN_URL,
-            {'login': 'stuck@example.com', 'password': PASSWORD},
-            REMOTE_ADDR='198.51.100.82',
-            follow=True,
-        )
+        response = sign_in(self.client, 'stuck@example.com', PASSWORD,
+                           ip='198.51.100.82')
         self.assertTrue(logged_in(self.client))
         self.assertTrue(response.context['user'].is_authenticated)
 

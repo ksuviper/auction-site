@@ -1,0 +1,11 @@
+{% extends "account/base_entrance.html" %}
+{% comment %}
+Bridge: allauth's mid-login pages (the MFA challenge, the trust prompt) into the
+site's own chrome.
+
+allauth's own layout is a standalone HTML document with a bare nav of its own.
+Its page templates fill {% block content %}, so that block is re-declared here
+inside the project's {% block inner_content %} wrapper. None of allauth's page
+markup is copied, so these pages keep working across allauth upgrades.
+{% endcomment %}
+{% block inner_content %}{% block content %}{% endblock content %}{% endblock inner_content %}

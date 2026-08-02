@@ -1,0 +1,1 @@
+{% load i18n %}{% autoescape off %}Your ASQ Daylily Auctions login code: {{ code }}{% endautoescape %}

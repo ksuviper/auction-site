@@ -15,6 +15,8 @@ from django.core.cache import cache
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
+from auctions.tests.utils import sign_in
+
 User = get_user_model()
 
 SIGNUP_URL = '/accounts/signup/'
@@ -293,11 +295,9 @@ class MandatoryEmailVerificationTests(TestCase):
         address.save(update_fields=['verified'])
         approve(address.user)
 
-        response = self.client.post(
-            '/accounts/login/',
-            {'login': 'verified@example.com', 'password': 'daylily-passphrase-42'},
-            REMOTE_ADDR='198.51.100.42',
-            follow=True,
+        response = sign_in(
+            self.client, 'verified@example.com', 'daylily-passphrase-42',
+            ip='198.51.100.42',
         )
 
         self.assertTrue(response.context['user'].is_authenticated)

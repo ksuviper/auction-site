@@ -1,0 +1,15 @@
+{% comment %}
+Overrides allauth/elements/form.html. Same fields and slots; adds spacing
+between the body and the action buttons, and stacks buttons on narrow screens.
+{% endcomment %}
+{% load allauth %}
+<form method="{{ attrs.method }}"
+      {% if attrs.action %}action="{{ attrs.action }}"{% endif %}
+      {% if attrs.id %}id="{{ attrs.id }}"{% endif %}>
+    {% slot body %}
+    {% endslot %}
+    <div class="d-flex flex-column flex-sm-row gap-2 mt-4">
+        {% slot actions %}
+        {% endslot %}
+    </div>
+</form>

@@ -63,6 +63,11 @@
                         </a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link" href="{% url 'security_settings' %}">
+                            <i class="fas fa-shield-halved me-1" aria-hidden="true"></i>Login &amp; Security
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link" href="{% url 'subscribe' %}">
                             <i class="fas fa-id-card me-1" aria-hidden="true"></i>Membership
                             {% user_subscription_status request.user as sub_status %}

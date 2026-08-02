@@ -2,6 +2,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
+from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
@@ -57,6 +58,73 @@ class RateLimitedSignupView(AllauthSignupView):
         # only ever renders on the email/password signup form.
         context['turnstile_site_key'] = settings.TURNSTILE_SITE_KEY
         return context
+
+
+class SecuritySettingsView(LoginRequiredMixin, TemplateView):
+    """
+    "Login & Security": the email-code preference plus a way into allauth's MFA.
+
+    Read-only summary and links; every state change happens either in
+    ToggleEmailLoginCodeView below or in allauth's own MFA views, which are
+    linked to rather than reimplemented.
+    """
+
+    template_name = 'auctions/security_settings.html'
+
+    def get_context_data(self, **kwargs):
+        from allauth.mfa.models import Authenticator
+
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+        profile, _ = UserProfile.objects.get_or_create(user=user)
+
+        authenticators = set(
+            Authenticator.objects.filter(user=user).values_list('type', flat=True)
+        )
+
+        context['profile'] = profile
+        context['email_code_locked'] = user.is_staff or user.is_superuser
+        context['totp_active'] = Authenticator.Type.TOTP in authenticators
+        context['recovery_codes_active'] = (
+            Authenticator.Type.RECOVERY_CODES in authenticators
+        )
+        return context
+
+
+class ToggleEmailLoginCodeView(LoginRequiredMixin, View):
+    """
+    Flip the user's email-code preference.
+
+    POST only, and it re-checks the staff rule server-side. The settings page
+    hides the control for staff, but hiding a control is not enforcement — the
+    adapter would ignore the flag for staff anyway, so letting it be written
+    would just leave a misleading value in the database.
+    """
+
+    def post(self, request, *args, **kwargs):
+        if request.user.is_staff or request.user.is_superuser:
+            return HttpResponseForbidden(
+                'Staff accounts require an emailed login code and cannot '
+                'disable it.'
+            )
+
+        profile, _ = UserProfile.objects.get_or_create(user=request.user)
+        profile.email_login_code_enabled = not profile.email_login_code_enabled
+        profile.save(update_fields=['email_login_code_enabled'])
+
+        if profile.email_login_code_enabled:
+            messages.success(
+                request,
+                'Login codes are back on. We\'ll email you a code each time '
+                'you sign in.',
+            )
+        else:
+            messages.info(
+                request,
+                'Login codes are off. You\'ll sign in with just your password '
+                'from now on.',
+            )
+        return redirect('security_settings')
 
 
 class AccountPendingApprovalView(TemplateView):

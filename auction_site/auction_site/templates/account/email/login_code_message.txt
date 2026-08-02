@@ -1,0 +1,26 @@
+{% comment %}
+Overrides allauth's login_code_message.txt. Deliberately does NOT extend
+account/email/base_message.txt: that wraps every message in "Hello from
+{{ site_name }}" / "Thank you for using {{ site_name }}", which reads as
+generic filler around the one thing that matters here. The site's members skew
+older and less technical, so the code comes first and the explanation follows.
+
+The subject line repeats the code so it is readable from an inbox list or a
+phone notification without opening the mail.
+{% endcomment %}
+{% load i18n %}{% autoescape off %}Your login code for ASQ Daylily Auctions is:
+
+    {{ code }}
+
+Type this code into the sign-in page you already have open. It expires in a few
+minutes, so if it stops working just sign in again and we'll send a new one.
+
+We ask for a code because knowing your password alone should not be enough for
+someone else to get into your account.
+
+If you weren't trying to sign in, you can ignore this email — nobody can get in
+without this code. If it keeps happening, please tell us at
+asqdaylilies@gmail.com.
+
+-- ASQ Daylily Auction Group
+{% endautoescape %}
