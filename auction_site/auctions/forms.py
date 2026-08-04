@@ -168,6 +168,60 @@ class BidForm(forms.Form):
     )
 
 
+class BuyNowForm(forms.Form):
+    """
+    How many units of a Buy It Now listing the buyer wants.
+
+    Validating against the listing here gives the buyer a friendly error, but it
+    is not the safeguard that keeps stock from going negative — two buyers can
+    both pass this check and then race. BuyNowView re-checks under
+    select_for_update(); that is the real guard.
+    """
+
+    # required=False so a POST that omits the field still buys one, which is what
+    # this endpoint did before quantities existed. A supplied value is still
+    # validated, so 0 and negatives are rejected rather than defaulted.
+    quantity = forms.IntegerField(
+        required=False,
+        min_value=1,
+        initial=1,
+        widget=forms.NumberInput(attrs={
+            'class': 'form-control form-control-lg',
+            'min': '1',
+            'step': '1',
+            'inputmode': 'numeric',
+            'aria-label': 'How many to buy',
+        }),
+        label='Quantity',
+        error_messages={
+            'invalid': 'Please enter a whole number.',
+            'min_value': 'Please buy at least one.',
+        },
+    )
+
+    def __init__(self, *args, **kwargs):
+        self.listing = kwargs.pop('listing')
+        super().__init__(*args, **kwargs)
+        remaining = self.listing.units_remaining
+        if remaining:
+            self.fields['quantity'].max_value = remaining
+            self.fields['quantity'].widget.attrs['max'] = remaining
+
+    def clean_quantity(self):
+        quantity = self.cleaned_data.get('quantity') or 1
+        remaining = self.listing.units_remaining
+
+        if remaining <= 0:
+            raise forms.ValidationError(
+                'Sorry, this item has just sold out.'
+            )
+        if quantity > remaining:
+            raise forms.ValidationError(
+                f'Only {remaining} left — please lower the quantity.'
+            )
+        return quantity
+
+
 class CommentForm(forms.Form):
     body = forms.CharField(
         max_length=1000,

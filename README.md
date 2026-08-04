@@ -11,7 +11,8 @@ and receive automated invoices when auctions close.
 - Weekly auction rotation with bulk listing upload
 - Automatic auction closing, winner assignment, and invoice generation (APScheduler)
 - Paid memberships via PayPal subscriptions, gating bidding and purchasing (US residents only)
-- Buy It Now listings alongside standard auctions
+- Buy It Now listings alongside standard auctions, with per-listing stock so
+  several buyers can each take part of it, and a seller-chosen shipping mode
 - Proxy (automatic) bidding up to a bidder's maximum
 - Listing questions & comments with admin moderation and threaded replies
 - Email notifications to winners and sellers on auction close
@@ -143,6 +144,71 @@ Visit `http://localhost:8000`. Log in at `/admin/` with your superuser credentia
 | `SECURE_HSTS_SECONDS` | No | `0` | Set `31536000` after HTTPS is confirmed working |
 | `SECURE_HSTS_INCLUDE_SUBDOMAINS` | No | `False` | Extend HSTS to subdomains |
 | `SECURE_HSTS_PRELOAD` | No | `False` | Enable HSTS preload list eligibility |
+
+---
+
+## Buy It Now Stock
+
+A Buy It Now listing carries a quantity, and **several buyers can each purchase
+part of it** until nothing is left. Auction listings are unaffected — they still
+sell one lot to one `winner`.
+
+| Field | Meaning |
+|---|---|
+| `quantity_available` | Units the seller listed. |
+| `quantity_remaining` | Units still for sale. Mirrors `quantity_available` at creation, then counts down. |
+| `shipping_mode` | `flat` — buyer pays shipping once no matter how many they buy. `per_item` — shipping is multiplied by the quantity. Chosen by the seller **per listing**. |
+| `Invoice.quantity` | Units on that invoice. One invoice per purchase, so one listing can have several. `Invoice.amount` is the line total (unit price × quantity), not the unit price. |
+
+Sellers set the quantity and shipping mode per row in **Weekly Setup**; both
+inputs appear only when the row's type is Buy It Now. Duplicating a listing in
+the admin resets its stock to full rather than inheriting how far the original
+sold down.
+
+### Behaviour worth knowing
+
+- **A listing closes at its scheduled `ends_at`, whatever stock is left.** Stock
+  caps availability; it is not a second clock. Leftover units stay on the record
+  and no invoice is invented for them.
+- **Running out also closes it** (`is_closed` and `is_active` both flip) so it
+  drops off the browse pages.
+- **`winner` is not set for Buy It Now sales any more.** It means "the one person
+  who won this lot", which cannot describe a listing several people bought from.
+  Who bought what lives in the invoices. Existing auction wins are untouched.
+- Reporting counts **units** (`Sum(Invoice.quantity)`), not invoice rows, and
+  reads sales from invoices rather than from listings-with-a-winner — otherwise
+  every Buy It Now sale would drop out of the totals. The invoice CSV export has
+  a Quantity column.
+
+### Overselling cannot happen
+
+The stock decrement is a single conditional `UPDATE`:
+
+```sql
+UPDATE ... SET quantity_remaining = quantity_remaining - N
+WHERE id = ... AND quantity_remaining >= N
+```
+
+The check and the write are one statement, so two buyers cannot both pass the
+check and then both write. If it matches no rows, someone else got there first
+and the buyer is told how many are actually left — no partial purchase is made.
+
+This deliberately does **not** rely on `select_for_update()`, which the view also
+uses. SQLite reports `has_select_for_update = False`, which makes that call a
+silent no-op — and this project defaults to SQLite. The lock helps on PostgreSQL;
+the conditional UPDATE is what holds everywhere.
+
+`auctions/tests/test_buy_now.py` pins this down with a form that skips its own
+stock check, leaving only the UPDATE to stop the oversell. The threaded tests
+beside it need a backend with concurrent writers and are skipped on SQLite,
+which answers "database table is locked" as soon as two threads write.
+
+### Upgrading an existing site
+
+Migration `0016` gives every pre-existing Buy It Now listing a stock count of 1 —
+sold ones get 0 remaining, the rest keep their single unit. Without it a null
+`quantity_remaining` reads as sold out, and every live Buy It Now listing would
+become unpurchasable the moment the migration landed.
 
 ---
 
@@ -473,8 +539,8 @@ python manage.py test auctions.tests
 
 The suite covers subscription gating, the PayPal webhook handler, buy-now,
 proxy bidding, registration security (rate limiting, Turnstile, mandatory email
-verification, admin approval, two-factor authentication), and end-to-end
-integration flows. PayPal API calls, Turnstile
+verification, admin approval, two-factor authentication), multi-quantity
+Buy It Now stock, and end-to-end integration flows. PayPal API calls, Turnstile
 verification, and webhook signature verification are mocked, so no network or
 credentials are needed.
 

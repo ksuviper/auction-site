@@ -26,6 +26,37 @@ from .models import (
 User = get_user_model()
 
 
+class BuyNowStockFilter(admin.SimpleListFilter):
+    """Filter Buy It Now listings by whether any units are left.
+
+    A plain filter on quantity_remaining would offer one option per count, and
+    would lump every auction listing under "None" — auction listings do not use
+    stock at all.
+    """
+
+    title = 'Buy It Now stock'
+    parameter_name = 'stock'
+
+    def lookups(self, request, model_admin):
+        return [
+            ('in_stock', 'In stock'),
+            ('sold_out', 'Sold out'),
+            ('not_applicable', 'Auction (no stock)'),
+        ]
+
+    def queryset(self, request, queryset):
+        value = self.value()
+        if value == 'in_stock':
+            return queryset.filter(
+                listing_type='buy_now', quantity_remaining__gt=0
+            )
+        if value == 'sold_out':
+            return queryset.filter(listing_type='buy_now', quantity_remaining=0)
+        if value == 'not_applicable':
+            return queryset.exclude(listing_type='buy_now')
+        return queryset
+
+
 @admin.action(description='Duplicate selected listing(s) for re-use next week')
 def duplicate_listings(modeladmin, request, queryset):
     count = queryset.count()
@@ -36,7 +67,12 @@ def duplicate_listings(modeladmin, request, queryset):
         listing.is_closed = False
         listing.is_active = True
         listing.current_bid = 0
-        # listing_type and buy_now_price carry over with the cloned instance.
+        # listing_type, buy_now_price, quantity_available and shipping_mode all
+        # carry over with the cloned instance. Stock is reset rather than
+        # inherited: a duplicate is next week's listing, so it starts fully
+        # available instead of picking up how far the original sold down.
+        if listing.listing_type == 'buy_now':
+            listing.quantity_remaining = listing.quantity_available
         listing.save()
     modeladmin.message_user(request, f'Duplicated {count} listing(s). Update dates before going live.')
 
@@ -201,6 +237,8 @@ class AuctionListingAdmin(ModelAdmin):
         'start_price',
         'current_bid',
         'buy_now_price',
+        'stock_display',
+        'shipping_mode',
         'reserve_price',
         'starts_at',
         'ends_at',
@@ -208,11 +246,23 @@ class AuctionListingAdmin(ModelAdmin):
         'is_closed',
         'winner',
     )
-    list_filter = ('listing_type', 'is_active', 'is_closed', 'category', 'seller')
+    list_filter = (
+        'listing_type', BuyNowStockFilter, 'shipping_mode', 'is_active',
+        'is_closed', 'category', 'seller',
+    )
     search_fields = ('title', 'description')
     raw_id_fields = ('winner',)
     date_hierarchy = 'starts_at'
     readonly_fields = ('image_preview',)
+
+    @admin.display(description='Stock', ordering='quantity_remaining')
+    def stock_display(self, obj):
+        """Remaining / total, or a dash for auction listings."""
+        if obj.listing_type != 'buy_now':
+            return '—'
+        if obj.units_remaining == 0:
+            return 'Sold out'
+        return f'{obj.units_remaining} of {obj.quantity_available}'
 
     @admin.display(description='Preview')
     def image_preview(self, obj):
@@ -247,6 +297,7 @@ class InvoiceAdmin(ModelAdmin):
         'item_display',
         'buyer',
         'seller',
+        'quantity',
         'amount',
         'shipping_fee',
         'payment_method',

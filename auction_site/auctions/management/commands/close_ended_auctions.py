@@ -60,10 +60,11 @@ class Command(BaseCommand):
 
         for listing in ended:
             try:
-                winner, invoice = self._close_listing(listing)
-                if winner is None and invoice is None:
+                result = self._close_listing(listing)
+                if result is None:
                     # Already closed by a concurrent worker — skip silently.
                     continue
+                winner, invoice = result
                 closed += 1
                 if invoice:
                     invoiced += 1
@@ -105,7 +106,11 @@ class Command(BaseCommand):
 
         if listing.is_closed:
             logger.debug('Listing pk=%d already closed by another worker — skipping.', listing.pk)
-            return None, None
+            # None, not (None, None): a listing that closes with no winner — a
+            # no-bid auction, or any Buy It Now listing — is a real close and
+            # must still be counted. Overloading (None, None) for both made the
+            # job report closed=0 for those.
+            return None
 
         top_bid = listing.bids.select_related('bidder').order_by('-amount').first()
 
@@ -141,6 +146,13 @@ class Command(BaseCommand):
     # ── Email notifications ───────────────────────────────────────────────────
 
     def _send_notifications(self, listing, top_bid, invoice):
+        if listing.listing_type == 'buy_now':
+            # Buy It Now listings notify at the moment of each purchase, in
+            # BuyNowView. Reaching ends_at is not a sale and not a failed
+            # auction, so the no-bids notice below would be wrong either way:
+            # the listing may well have sold out already.
+            return
+
         if top_bid:
             self._email_winner(listing, top_bid, invoice)
             self._email_seller(listing, top_bid)

@@ -85,6 +85,7 @@ class WeeklyListingForm(forms.ModelForm):
         model = AuctionListing
         fields = [
             'title', 'description', 'listing_type', 'start_price', 'buy_now_price',
+            'quantity_available', 'shipping_mode',
             'reserve_price', 'starts_at', 'ends_at', 'image',
         ]
         widgets = {
@@ -98,6 +99,7 @@ class WeeklyListingForm(forms.ModelForm):
             ),
             'description': forms.Textarea(attrs={'rows': 2}),
             'listing_type': forms.Select(attrs={'class': 'listing-type-select'}),
+            'quantity_available': forms.NumberInput(attrs={'min': 1, 'step': 1}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -107,6 +109,36 @@ class WeeklyListingForm(forms.ModelForm):
             field.required = False
         self.fields['starts_at'].input_formats = ['%Y-%m-%dT%H:%M', '%Y-%m-%d %H:%M']
         self.fields['ends_at'].input_formats = ['%Y-%m-%dT%H:%M', '%Y-%m-%d %H:%M']
+        self.fields['quantity_available'].help_text = 'How many units are for sale.'
+        self.fields['shipping_mode'].help_text = (
+            'Flat fee: buyer pays shipping once no matter how many they buy. '
+            'Per item: shipping is multiplied by the quantity they buy.'
+        )
+
+    def clean(self):
+        """Require the Buy It Now fields on rows that are actually buy_now.
+
+        Every field is optional at the Django level so blank spare rows can be
+        ignored, which means these two have to be checked here — otherwise a
+        buy_now row could be saved with no price, or fall back to the
+        single-unit default when the seller meant to enter a real count.
+        """
+        cleaned = super().clean()
+        if not cleaned.get('title'):
+            # A blank spare row; the view skips it.
+            return cleaned
+
+        if cleaned.get('listing_type') == 'buy_now':
+            if not cleaned.get('buy_now_price'):
+                self.add_error(
+                    'buy_now_price', 'Required for a Buy It Now listing.'
+                )
+            if not cleaned.get('quantity_available'):
+                self.add_error(
+                    'quantity_available',
+                    'Enter how many units are available.',
+                )
+        return cleaned
 
     def is_empty(self):
         return not self.cleaned_data.get('title')

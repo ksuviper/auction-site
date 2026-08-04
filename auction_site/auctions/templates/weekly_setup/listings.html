@@ -46,6 +46,11 @@
                 <th style="width:110px;">Reserve</th>
                 <th style="width:120px;">Type</th>
                 <th style="width:120px;">Buy Now $</th>
+                <th style="width:90px;" title="Buy It Now only: how many units are for sale.">Qty</th>
+                <th style="width:150px;"
+                    title="Flat fee: buyer pays shipping once no matter how many they buy. Per item: shipping is multiplied by the quantity they buy.">
+                  Shipping
+                </th>
                 <th style="width:170px;">Starts At <span class="text-danger">*</span></th>
                 <th style="width:170px;">Ends At <span class="text-danger">*</span></th>
                 <th style="width:160px;">Image</th>
@@ -77,10 +82,25 @@
                   {% if form.listing_type.errors %}<div class="text-danger small">{{ form.listing_type.errors|join:", " }}</div>{% endif %}
                 </td>
                 <td>
-                  <div class="buy-now-price"{% if form.listing_type.value != 'buy_now' %} style="display:none;"{% endif %}>
+                  <div class="buy-now-price buy-now-only"{% if form.listing_type.value != 'buy_now' %} style="display:none;"{% endif %}>
                     {{ form.buy_now_price }}
                   </div>
                   {% if form.buy_now_price.errors %}<div class="text-danger small">{{ form.buy_now_price.errors|join:", " }}</div>{% endif %}
+                </td>
+                <td>
+                  <div class="buy-now-only"{% if form.listing_type.value != 'buy_now' %} style="display:none;"{% endif %}>
+                    {{ form.quantity_available }}
+                  </div>
+                  {% if form.quantity_available.errors %}<div class="text-danger small">{{ form.quantity_available.errors|join:", " }}</div>{% endif %}
+                </td>
+                <td>
+                  <div class="buy-now-only"{% if form.listing_type.value != 'buy_now' %} style="display:none;"{% endif %}>
+                    {{ form.shipping_mode }}
+                    <div class="form-text small">
+                      Flat = charged once. Per item = × quantity.
+                    </div>
+                  </div>
+                  {% if form.shipping_mode.errors %}<div class="text-danger small">{{ form.shipping_mode.errors|join:", " }}</div>{% endif %}
                 </td>
                 <td>
                   {{ form.starts_at }}
@@ -146,12 +166,16 @@
   var addBtn = document.getElementById('add-row');
   var totalInput = document.querySelector('[name="listings-TOTAL_FORMS"]');
 
-  // Show the Buy Now price input only when the row's type is "Buy It Now".
+  // Show the Buy It Now inputs — price, quantity, shipping mode — only when
+  // the row's type is "Buy It Now".
   function wireRow(row) {
     var sel = row.querySelector('select[name$="-listing_type"]');
-    var wrap = row.querySelector('.buy-now-price');
-    if (!sel || !wrap) return;
-    function sync() { wrap.style.display = (sel.value === 'buy_now') ? '' : 'none'; }
+    var wraps = row.querySelectorAll('.buy-now-only');
+    if (!sel || !wraps.length) return;
+    function sync() {
+      var show = (sel.value === 'buy_now') ? '' : 'none';
+      wraps.forEach(function (wrap) { wrap.style.display = show; });
+    }
     sel.addEventListener('change', sync);
     sync();
   }

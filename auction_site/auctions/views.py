@@ -2,6 +2,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
+from django.db.models import F
 from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse, reverse_lazy
@@ -13,7 +14,13 @@ from django.views.generic import DetailView, ListView, TemplateView, UpdateView
 from allauth.account.views import SignupView as AllauthSignupView
 from django_ratelimit.decorators import ratelimit
 
-from .forms import BidForm, CommentForm, ProfileUpdateForm, ProxyBidForm
+from .forms import (
+    BidForm,
+    BuyNowForm,
+    CommentForm,
+    ProfileUpdateForm,
+    ProxyBidForm,
+)
 from .models import (
     AuctionCategory,
     AuctionListing,
@@ -240,6 +247,8 @@ class ListingDetailView(DetailView):
         ctx['bids'] = listing.bids.select_related('bidder').order_by('-placed_at')
         ctx['is_ended'] = listing.is_closed or listing.ends_at <= now
         ctx['bid_form'] = BidForm()
+        if listing.listing_type == 'buy_now':
+            ctx['buy_now_form'] = BuyNowForm(listing=listing)
         ctx['proxy_bid_form'] = ProxyBidForm()
         ctx['comment_form'] = CommentForm()
         ctx['comments'] = (
@@ -369,7 +378,7 @@ class BuyNowView(LoginRequiredMixin, View):
 
         with transaction.atomic():
             # Row lock so concurrent purchase attempts serialize — the second
-            # one blocks here, then sees is_closed=True below and bails out.
+            # one blocks here, then re-reads the stock count below.
             listing = get_object_or_404(
                 AuctionListing.objects.select_for_update().select_related('seller'),
                 pk=pk,
@@ -380,24 +389,82 @@ class BuyNowView(LoginRequiredMixin, View):
                 return redirect('listing_detail', pk=pk)
 
             if listing.is_closed or not listing.is_active or listing.ends_at <= timezone.now():
-                messages.error(request, 'Sorry, this item has already been purchased.')
+                messages.error(request, 'Sorry, this item is no longer available.')
                 return redirect('listing_detail', pk=pk)
 
             if listing.seller is None:
                 messages.error(request, 'This item cannot be purchased right now.')
                 return redirect('listing_detail', pk=pk)
 
-            listing.is_closed = True
-            listing.is_active = False
-            listing.winner = request.user
-            listing.save(update_fields=['is_closed', 'is_active', 'winner', 'updated_at'])
+            # Bind the form to the locked row. Its check is against stock nobody
+            # else can be changing right now, so passing it here is decisive —
+            # unlike a check made before the lock was held.
+            form = BuyNowForm(request.POST, listing=listing)
+            if not form.is_valid():
+                remaining = listing.units_remaining
+                if remaining <= 0:
+                    messages.error(
+                        request, 'Sorry, this item has just sold out.'
+                    )
+                else:
+                    messages.error(
+                        request,
+                        f'Sorry, only {remaining} remaining — please adjust '
+                        'your quantity.',
+                    )
+                return redirect('listing_detail', pk=pk)
+
+            quantity = form.cleaned_data['quantity']
+
+            # The decisive guard. One UPDATE that both tests and decrements the
+            # stock, so the check cannot be separated from the write by another
+            # request. This does not rely on the row lock above: SQLite reports
+            # has_select_for_update = False, which makes select_for_update() a
+            # silent no-op there — and this project defaults to SQLite. A
+            # conditional UPDATE is atomic on every backend.
+            claimed = AuctionListing.objects.filter(
+                pk=listing.pk, quantity_remaining__gte=quantity
+            ).update(
+                quantity_remaining=F('quantity_remaining') - quantity,
+                updated_at=timezone.now(),
+            )
+
+            if not claimed:
+                # Another buyer took the stock in between. Nothing was written,
+                # so there is no partial purchase to unwind.
+                listing.refresh_from_db(fields=['quantity_remaining'])
+                remaining = listing.units_remaining
+                if remaining <= 0:
+                    messages.error(request, 'Sorry, this item has just sold out.')
+                else:
+                    messages.error(
+                        request,
+                        f'Sorry, only {remaining} remaining — please adjust '
+                        'your quantity.',
+                    )
+                return redirect('listing_detail', pk=pk)
+
+            listing.refresh_from_db(fields=['quantity_remaining'])
+
+            # Stock caps availability; it is not what ends a listing. One with
+            # units left stays open until ends_at, and close_ended_auctions
+            # closes it then regardless of leftover stock.
+            #
+            # `winner` stays untouched: it means "the single person who won this
+            # lot", which no longer describes a listing several buyers can each
+            # take a share of. Who bought what lives in the Invoice rows.
+            if listing.quantity_remaining == 0:
+                listing.is_closed = True
+                listing.is_active = False
+                listing.save(update_fields=['is_closed', 'is_active', 'updated_at'])
 
             invoice = Invoice.objects.create(
                 listing=listing,
                 buyer=request.user,
                 seller=listing.seller,
-                amount=listing.buy_now_price,
-                shipping_fee=listing.seller.shipping_fee,
+                quantity=quantity,
+                amount=listing.buy_now_price * quantity,
+                shipping_fee=listing.shipping_for(quantity),
                 payment_method='',
                 is_manually_created=False,
             )
@@ -413,6 +480,9 @@ class BuyNowView(LoginRequiredMixin, View):
     def _send_purchase_emails(self, listing, buyer, invoice):
         seller = listing.seller
         admin_email = getattr(settings, 'ADMIN_EMAIL', '')
+        shipping_note = (
+            'per item' if listing.shipping_mode == 'per_item' else 'flat rate'
+        )
 
         # Buyer — purchase confirmation with payment instructions.
         if buyer.email:
@@ -420,8 +490,10 @@ class BuyNowView(LoginRequiredMixin, View):
 Thank you for your purchase, {buyer.username}!
 
 Item:            {listing.title}
-Price:           ${invoice.amount}
-Shipping fee:    ${invoice.shipping_fee}
+Quantity:        {invoice.quantity}
+Price each:      ${listing.buy_now_price}
+Item total:      ${invoice.amount}
+Shipping fee:    ${invoice.shipping_fee} ({shipping_note})
 Total:           ${invoice.total}
 
 Seller:          {seller.name}
@@ -444,8 +516,11 @@ You can view your invoice (#{invoice.pk}) any time from your account.
             body = f"""\
 Your item "{listing.title}" was purchased by {buyer.username}.
 
-Price:         ${invoice.amount}
-Shipping fee:  ${invoice.shipping_fee}
+Quantity:      {invoice.quantity} of {listing.quantity_available}
+Price each:    ${listing.buy_now_price}
+Item total:    ${invoice.amount}
+Shipping fee:  ${invoice.shipping_fee} ({shipping_note})
+Still in stock: {listing.units_remaining}
 Buyer email:   {buyer.email or '(not provided)'}
 Invoice:       #{invoice.pk}
 
@@ -467,7 +542,10 @@ Please contact the buyer to arrange payment and shipping.
 Listing ID:  {listing.pk}
 Title:       {listing.title}
 Buyer:       {buyer.username} ({buyer.email or 'no email'})
+Quantity:    {invoice.quantity} @ ${listing.buy_now_price} each
 Amount:      ${invoice.amount}
+Shipping:    ${invoice.shipping_fee} ({shipping_note})
+Remaining:   {listing.units_remaining} of {listing.quantity_available}
 Invoice ID:  {invoice.pk}
 
 -- ASQ Daylily Auction System

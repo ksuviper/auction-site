@@ -3,7 +3,7 @@ import io
 import json
 from datetime import date
 
-from django.db.models import Count, DecimalField, Sum
+from django.db.models import Count, DecimalField, F, Sum
 from django.db.models.functions import Coalesce, ExtractMonth, ExtractYear
 from django.http import StreamingHttpResponse
 from django.shortcuts import render
@@ -18,21 +18,29 @@ class ReportsView(StaffRequiredMixin, View):
 
     def get(self, request):
         # ── All-time summary ─────────────────────────────────────────────────
-        total_sold = AuctionListing.objects.filter(
-            is_closed=True, winner__isnull=False
-        ).count()
+        # Units, not invoice rows: one Buy It Now invoice can cover several
+        # plants. Counting invoices instead of summing quantity would under-report
+        # every multi-unit sale.
+        #
+        # Sourced from Invoice rather than from listings-with-a-winner, which is
+        # what this used to count. `winner` is only set for auction wins now, so
+        # a listing-based count would silently drop every Buy It Now sale.
+        total_sold = Invoice.objects.aggregate(
+            units=Coalesce(Sum('quantity'), 0)
+        )['units']
 
         total_revenue = Invoice.objects.aggregate(
             total=Coalesce(Sum('amount'), 0, output_field=DecimalField())
         )['total']
 
         # ── By year ──────────────────────────────────────────────────────────
+        # Keyed off the invoice date so a sale counts in the year it happened,
+        # and so buy_now sales are included at all.
         sales_by_year = dict(
-            AuctionListing.objects
-            .filter(is_closed=True, winner__isnull=False)
-            .annotate(year=ExtractYear('ends_at'))
+            Invoice.objects
+            .annotate(year=ExtractYear('created_at'))
             .values('year')
-            .annotate(sold=Count('pk'))
+            .annotate(sold=Sum('quantity'))
             .values_list('year', 'sold')
         )
         revenue_by_year = dict(
@@ -56,16 +64,27 @@ class ReportsView(StaffRequiredMixin, View):
         by_seller = list(
             Invoice.objects
             .values('seller__name')
-            .annotate(count=Count('pk'), total=Sum('amount'))
+            .annotate(
+                count=Count('pk'),
+                units=Coalesce(Sum('quantity'), 0),
+                total=Sum('amount'),
+            )
             .order_by('-total')
         )
 
         # ── By category ──────────────────────────────────────────────────────
+        # Also moved onto Invoice. The old version grouped listings and summed
+        # current_bid, which is 0 on a Buy It Now listing — so buy_now revenue
+        # showed as zero even before `winner` stopped being set.
         by_category = list(
-            AuctionListing.objects
-            .filter(is_closed=True, winner__isnull=False)
-            .values('category__name')
-            .annotate(count=Count('pk'), revenue=Sum('current_bid'))
+            Invoice.objects
+            .filter(listing__isnull=False)
+            .values(category__name=F('listing__category__name'))
+            .annotate(
+                count=Count('pk'),
+                units=Coalesce(Sum('quantity'), 0),
+                revenue=Sum('amount'),
+            )
             .order_by('-revenue')
         )
 
@@ -97,7 +116,7 @@ class ReportsView(StaffRequiredMixin, View):
 # ── CSV export ────────────────────────────────────────────────────────────────
 
 _CSV_HEADERS = [
-    'Invoice #', 'Buyer', 'Seller', 'Item',
+    'Invoice #', 'Buyer', 'Seller', 'Item', 'Quantity',
     'Amount', 'Shipping', 'Total', 'Payment Method', 'Sent', 'Date',
 ]
 
@@ -116,6 +135,9 @@ def _invoice_rows():
             inv.buyer.username,
             inv.seller.name,
             inv.item_display,
+            # A Buy It Now invoice can cover several units, so the dollar
+            # columns alone no longer say how many plants shipped.
+            inv.quantity,
             inv.amount,
             inv.shipping_fee,
             inv.total,

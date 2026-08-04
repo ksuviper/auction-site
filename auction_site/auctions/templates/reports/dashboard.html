@@ -93,6 +93,7 @@
         <tr>
           <th>Seller</th>
           <th class="text-end">Invoices</th>
+          <th class="text-end">Plants</th>
           <th class="text-end">Total Revenue</th>
         </tr>
       </thead>
@@ -101,10 +102,11 @@
         <tr>
           <td>{{ row.seller__name }}</td>
           <td class="text-end">{{ row.count }}</td>
+          <td class="text-end">{{ row.units }}</td>
           <td class="text-end">${{ row.total|floatformat:2 }}</td>
         </tr>
         {% empty %}
-        <tr><td colspan="3" class="text-muted text-center py-3">No data yet.</td></tr>
+        <tr><td colspan="4" class="text-muted text-center py-3">No data yet.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -127,7 +129,7 @@
         {% for row in by_category %}
         <tr>
           <td>{{ row.category__name }}</td>
-          <td class="text-end">{{ row.count }}</td>
+          <td class="text-end">{{ row.units }}</td>
           <td class="text-end">${{ row.revenue|floatformat:2 }}</td>
         </tr>
         {% empty %}

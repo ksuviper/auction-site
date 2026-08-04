@@ -60,8 +60,17 @@
         {% if listing.listing_type == 'buy_now' %}
         <div class="mb-3">
           <div class="text-muted fs-5 mb-1">Price</div>
-          <div class="fw-bold text-success" style="font-size:2.25rem;">${{ listing.buy_now_price }}</div>
-          <div class="text-muted">Buy It Now</div>
+          <div class="fw-bold text-success" style="font-size:2.25rem;">
+            ${{ listing.buy_now_price }} <span class="fs-5 text-muted">each</span>
+          </div>
+          <div class="text-muted">
+            Buy It Now —
+            {% if listing.is_sold_out %}
+            <span class="fw-semibold text-danger">Sold out</span>
+            {% else %}
+            <span class="fw-semibold">{{ listing.units_remaining }} available</span>
+            {% endif %}
+          </div>
         </div>
         {% elif listing.current_bid > 0 %}
         <div class="mb-3">
@@ -94,11 +103,17 @@
     <div class="alert alert-secondary fs-5 mb-3" role="alert">
       <i class="fas fa-lock me-2"></i>
       <strong>
-        {% if listing.listing_type == 'buy_now' %}This item has been sold.{% else %}This auction has ended.{% endif %}
+        {% if listing.listing_type == 'buy_now' %}
+        {% if listing.is_sold_out %}This item has sold out.{% else %}This item is no longer available.{% endif %}
+        {% else %}This auction has ended.{% endif %}
       </strong>
-      {% if listing.winner %}
-      {% if listing.listing_type == 'buy_now' %}Purchased{% else %}Won{% endif %}
-      by <strong>{{ listing.winner.username }}</strong>.
+      {% comment %}
+      Only auction listings name a winner. A buy_now listing can have several
+      buyers, so there is no single person to name here — the invoices record
+      who bought what.
+      {% endcomment %}
+      {% if listing.winner and listing.listing_type != 'buy_now' %}
+      Won by <strong>{{ listing.winner.username }}</strong>.
       {% endif %}
     </div>
 
@@ -139,18 +154,61 @@
         </a>
       </div>
     </div>
+    {% elif listing.is_sold_out %}
+    {# The page was loaded while stock was still available and has since gone. #}
+    <div class="alert alert-secondary fs-5 mb-3" role="alert">
+      <i class="fas fa-lock me-2"></i>
+      <strong>Sold out.</strong> Every unit of this listing has been purchased.
+    </div>
     {% else %}
     <div class="alert bid-commitment-alert mb-3" role="alert">
       <i class="fas fa-exclamation-triangle me-2 text-warning"></i>
       <strong>Clicking confirm is a commitment to purchase. This cannot be undone.</strong>
     </div>
-    <form method="post" action="{% url 'buy_now' pk=listing.pk %}"
-          onsubmit="return confirm('Confirm purchase of {{ listing.title|escapejs }} for ${{ listing.buy_now_price }}? This cannot be undone.');">
+    <form method="post" action="{% url 'buy_now' pk=listing.pk %}" id="buy-now-form">
       {% csrf_token %}
+      <div class="mb-3">
+        <label for="{{ buy_now_form.quantity.id_for_label }}" class="form-label fw-semibold fs-5">
+          How many? <span class="text-muted fw-normal">({{ listing.units_remaining }} available)</span>
+        </label>
+        {{ buy_now_form.quantity }}
+        <div class="form-text fs-6">
+          Shipping is
+          {% if listing.shipping_mode == 'per_item' %}
+          charged per item, so it is multiplied by the quantity you buy.
+          {% else %}
+          a flat fee — you pay it once no matter how many you buy.
+          {% endif %}
+        </div>
+      </div>
       <button type="submit" class="btn btn-success btn-lg w-100 fw-semibold">
-        <i class="fas fa-bag-shopping me-2"></i>Buy It Now — ${{ listing.buy_now_price }}
+        <i class="fas fa-bag-shopping me-2"></i>Buy It Now — ${{ listing.buy_now_price }} each
       </button>
     </form>
+    {{ listing.buy_now_price|json_script:"buy-now-unit-price" }}
+    <script>
+      // Built at submit time so the confirmation names the quantity and total
+      // the buyer actually chose, instead of a fixed single-unit price.
+      (function () {
+        var form = document.getElementById('buy-now-form');
+        var priceEl = document.getElementById('buy-now-unit-price');
+        if (!form || !priceEl) { return; }
+        var unitPrice = Number(JSON.parse(priceEl.textContent));
+        var input = form.querySelector('#{{ buy_now_form.quantity.id_for_label }}');
+
+        form.addEventListener('submit', function (event) {
+          var qty = parseInt(input.value, 10);
+          if (!qty || qty < 1) { return; }
+          var message = 'Buying ' + qty + ' × $' + unitPrice.toFixed(2) +
+                        ' = $' + (unitPrice * qty).toFixed(2) +
+                        ' plus shipping. This is a commitment to purchase and ' +
+                        'cannot be undone.';
+          if (!window.confirm(message)) {
+            event.preventDefault();
+          }
+        });
+      })();
+    </script>
     {% endif %}
 
     {% elif not request.user.is_authenticated %}
