@@ -116,7 +116,7 @@
 
           <!-- Buy It Now-only pricing and stock -->
           <div class="row g-4 mb-4 buy-now-only">
-            <div class="col-md-4">
+            <div class="col-md-6">
               <label for="{{ form.buy_now_price.id_for_label }}" class="form-label fw-semibold fs-5">
                 Price each <span class="text-danger">*</span>
               </label>
@@ -125,7 +125,7 @@
               <div class="text-danger fw-semibold">{{ form.buy_now_price.errors|join:", " }}</div>
               {% endif %}
             </div>
-            <div class="col-md-4">
+            <div class="col-md-6">
               <label for="{{ form.quantity_available.id_for_label }}" class="form-label fw-semibold fs-5">
                 How many <span class="text-danger">*</span>
               </label>
@@ -135,9 +135,22 @@
               <div class="text-danger fw-semibold">{{ form.quantity_available.errors|join:", " }}</div>
               {% endif %}
             </div>
-            <div class="col-md-4">
+            <div class="col-md-6">
+              <label for="{{ form.shipping_fee.id_for_label }}" class="form-label fw-semibold fs-5">
+                Shipping cost
+              </label>
+              <div class="input-group input-group-lg">
+                <span class="input-group-text">$</span>
+                {{ form.shipping_fee }}
+              </div>
+              <div class="form-text fs-6">{{ form.shipping_fee.help_text }}</div>
+              {% if form.shipping_fee.errors %}
+              <div class="text-danger fw-semibold">{{ form.shipping_fee.errors|join:", " }}</div>
+              {% endif %}
+            </div>
+            <div class="col-md-6">
               <label for="{{ form.shipping_mode.id_for_label }}" class="form-label fw-semibold fs-5">
-                Shipping
+                Charged how?
               </label>
               {{ form.shipping_mode }}
               <div class="form-text fs-6">{{ form.shipping_mode.help_text }}</div>

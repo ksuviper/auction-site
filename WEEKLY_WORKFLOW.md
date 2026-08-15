@@ -38,7 +38,8 @@ entries.
 | Reserve price | Auction only, optional: the listing will not sell below this |
 | Price each | Buy It Now only |
 | How many | Buy It Now only: units for sale. Several buyers can each take some. |
-| Shipping | Buy It Now only: flat fee once, or multiplied by quantity |
+| Shipping cost | Buy It Now only: what the buyer pays to ship this plant. Starts at the seller's standard fee; change it for a plant that ships differently. Leave blank to always follow the seller's fee. |
+| Charged how? | Buy It Now only: the shipping cost once per order (flat), or multiplied by the quantity bought (per item) |
 | Starts / Ends | Date + time bidding opens and closes |
 
 **Category, start time and end time carry over to the next entry**, since a

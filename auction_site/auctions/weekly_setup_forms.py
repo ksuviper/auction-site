@@ -91,6 +91,7 @@ class AuctionListingForm(forms.ModelForm):
             'title', 'description', 'image', 'category', 'listing_type',
             'start_price', 'reserve_price',
             'buy_now_price', 'quantity_available', 'shipping_mode',
+            'shipping_fee',
             'starts_at', 'ends_at',
         ]
         widgets = {
@@ -124,6 +125,9 @@ class AuctionListingForm(forms.ModelForm):
                 'class': 'form-control form-control-lg', 'min': 1, 'step': 1,
             }),
             'shipping_mode': forms.Select(attrs={'class': 'form-select form-select-lg'}),
+            'shipping_fee': forms.NumberInput(attrs={
+                'class': 'form-control form-control-lg', 'step': '0.01', 'min': '0',
+            }),
             'starts_at': forms.DateTimeInput(
                 attrs={'class': 'form-control form-control-lg', 'type': 'datetime-local'},
                 format='%Y-%m-%dT%H:%M',
@@ -134,7 +138,8 @@ class AuctionListingForm(forms.ModelForm):
             ),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, seller=None, **kwargs):
+        self.seller = seller
         super().__init__(*args, **kwargs)
 
         self.fields['category'].queryset = AuctionCategory.objects.filter(
@@ -153,7 +158,7 @@ class AuctionListingForm(forms.ModelForm):
         # would demand it on every listing — including auctions, which never
         # show the field. clean() falls back to the model default.
         for name in ('start_price', 'buy_now_price', 'quantity_available',
-                     'shipping_mode'):
+                     'shipping_mode', 'shipping_fee'):
             self.fields[name].required = False
 
         # PositiveIntegerField contributes min_value=0, which overrides the
@@ -169,6 +174,16 @@ class AuctionListingForm(forms.ModelForm):
             'Flat fee: buyer pays shipping once no matter how many they buy. '
             'Per item: shipping is multiplied by the quantity they buy.'
         )
+        if self.seller is not None:
+            self.fields['shipping_fee'].help_text = (
+                f"What the buyer pays to ship this plant. Leave blank to use "
+                f"{self.seller.name}'s standard fee of ${self.seller.shipping_fee}."
+            )
+        else:
+            self.fields['shipping_fee'].help_text = (
+                "What the buyer pays to ship this plant. Leave blank to use the "
+                "seller's standard fee."
+            )
 
     def clean(self):
         cleaned = super().clean()
@@ -195,6 +210,9 @@ class AuctionListingForm(forms.ModelForm):
             cleaned['buy_now_price'] = None
             cleaned['quantity_available'] = None
             cleaned['shipping_mode'] = 'flat'
+            # Auction shipping is settled from the seller's fee when the auction
+            # closes, so a per-listing amount would be collected and never used.
+            cleaned['shipping_fee'] = None
 
         starts_at, ends_at = cleaned.get('starts_at'), cleaned.get('ends_at')
         if starts_at and ends_at and ends_at <= starts_at:

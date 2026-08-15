@@ -146,6 +146,15 @@ class AuctionListing(models.Model):
             'buy. Per item: shipping is multiplied by the quantity they buy.'
         ),
     )
+    shipping_fee = models.DecimalField(
+        max_digits=7, decimal_places=2, null=True, blank=True,
+        help_text=(
+            "Shipping cost for this listing. Leave blank to use the seller's "
+            'standard shipping fee. Combined with the shipping mode above: a '
+            'flat fee is charged once per order, a per-item fee is multiplied '
+            'by the quantity bought.'
+        ),
+    )
     starts_at = models.DateTimeField()
     ends_at = models.DateTimeField()
     is_active = models.BooleanField(default=True)
@@ -215,18 +224,35 @@ class AuctionListing(models.Model):
     def is_sold_out(self) -> bool:
         return self.listing_type == 'buy_now' and self.units_remaining == 0
 
+    @property
+    def shipping_rate(self):
+        """
+        The per-order (or per-item) shipping charge for this listing.
+
+        The listing's own fee when one is set, otherwise the seller's standard
+        fee. Plants do not all ship alike — a big double fan costs more to send
+        than a small one — so a Buy It Now listing can carry its own price
+        without disturbing the seller's default for everything else.
+        """
+        if self.shipping_fee is not None:
+            base = self.shipping_fee
+        elif self.seller:
+            base = self.seller.shipping_fee
+        else:
+            base = 0
+        # Coerced because callers (and this project's own fixtures) sometimes
+        # assign decimal fields as strings; '5.00' * 3 would silently produce
+        # '5.005.005.00' rather than 15.00.
+        return Decimal(str(base))
+
     def shipping_for(self, quantity: int):
         """
         Shipping charged for ``quantity`` units, per this listing's mode.
 
-        'flat' bills the seller's fee once however many units are bought;
-        'per_item' multiplies it. Auction listings never reach here.
+        'flat' bills the rate once however many units are bought; 'per_item'
+        multiplies it. Auction listings never reach here.
         """
-        base = self.seller.shipping_fee if self.seller else 0
-        # Coerced because callers (and this project's own fixtures) sometimes
-        # assign decimal fields as strings; '5.00' * 3 would silently produce
-        # '5.005.005.00' rather than 15.00.
-        base = Decimal(str(base))
+        base = self.shipping_rate
         if self.shipping_mode == 'per_item':
             return base * quantity
         return base

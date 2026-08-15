@@ -126,7 +126,9 @@ class Command(BaseCommand):
                 buyer=top_bid.bidder,
                 seller=listing.seller,
                 amount=top_bid.amount,
-                shipping_fee=listing.seller.shipping_fee,
+                # shipping_rate falls back to the seller's fee unless this
+                # listing carries its own.
+                shipping_fee=listing.shipping_rate,
                 payment_method='',      # winner confirms their preferred method
                 notes='',
                 is_sent=False,

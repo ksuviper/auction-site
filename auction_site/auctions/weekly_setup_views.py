@@ -52,17 +52,23 @@ class WeeklyListingCreateView(StaffRequiredMixin, View):
 
         A week's listings almost always share a category and a start/end window,
         so repeating them by hand for every entry is the tax that made the bulk
-        grid feel necessary. Nothing else is prefilled — title, description,
-        image and price are per-plant.
+        grid feel necessary. Title, description, image and price stay blank —
+        those are per-plant.
+
+        Shipping starts at the seller's standard fee so the box always shows
+        what the buyer would actually pay; overriding it for a plant that ships
+        differently is then a deliberate edit rather than a blank to remember.
         """
+        initial = {'shipping_fee': seller.shipping_fee}
+
         previous = self._listings(seller).first()
-        if previous is None:
-            return {}
-        return {
-            'category': previous.category_id,
-            'starts_at': previous.starts_at,
-            'ends_at': previous.ends_at,
-        }
+        if previous is not None:
+            initial.update({
+                'category': previous.category_id,
+                'starts_at': previous.starts_at,
+                'ends_at': previous.ends_at,
+            })
+        return initial
 
     def _context(self, seller, form):
         return {
@@ -73,12 +79,12 @@ class WeeklyListingCreateView(StaffRequiredMixin, View):
 
     def get(self, request, seller_pk):
         seller = self._get_seller(seller_pk)
-        form = AuctionListingForm(initial=self._initial(seller))
+        form = AuctionListingForm(seller=seller, initial=self._initial(seller))
         return render(request, self.template_name, self._context(seller, form))
 
     def post(self, request, seller_pk):
         seller = self._get_seller(seller_pk)
-        form = AuctionListingForm(request.POST, request.FILES)
+        form = AuctionListingForm(request.POST, request.FILES, seller=seller)
 
         if not form.is_valid():
             return render(request, self.template_name, self._context(seller, form))

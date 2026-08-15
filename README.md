@@ -159,10 +159,13 @@ sell one lot to one `winner`.
 | `quantity_available` | Units the seller listed. |
 | `quantity_remaining` | Units still for sale. Mirrors `quantity_available` at creation, then counts down. |
 | `shipping_mode` | `flat` — buyer pays shipping once no matter how many they buy. `per_item` — shipping is multiplied by the quantity. Chosen by the seller **per listing**. |
+| `shipping_fee` | What shipping costs for this listing. Blank falls back to the seller's standard fee, so plants that ship differently can be priced individually. `listing.shipping_rate` resolves the two. |
 | `Invoice.quantity` | Units on that invoice. One invoice per purchase, so one listing can have several. `Invoice.amount` is the line total (unit price × quantity), not the unit price. |
 
-Sellers set the quantity and shipping mode on the **Weekly Setup** add-listing
-form; both inputs appear only when the listing type is Buy It Now. Duplicating a listing in
+Sellers set the quantity, shipping cost and shipping mode on the **Weekly
+Setup** add-listing form; those inputs appear only when the listing type is Buy
+It Now. The shipping cost box starts at the seller's standard fee, so it always
+shows what the buyer would pay and an override is a deliberate edit. Duplicating a listing in
 the admin resets its stock to full rather than inheriting how far the original
 sold down.
 

@@ -238,7 +238,7 @@ class AuctionListingAdmin(ModelAdmin):
         'current_bid',
         'buy_now_price',
         'stock_display',
-        'shipping_mode',
+        'shipping_display',
         'reserve_price',
         'starts_at',
         'ends_at',
@@ -254,6 +254,15 @@ class AuctionListingAdmin(ModelAdmin):
     raw_id_fields = ('winner',)
     date_hierarchy = 'starts_at'
     readonly_fields = ('image_preview',)
+
+    @admin.display(description='Shipping', ordering='shipping_fee')
+    def shipping_display(self, obj):
+        """Effective rate and how it is charged; '(seller)' when inherited."""
+        if obj.listing_type != 'buy_now':
+            return '—'
+        source = '' if obj.shipping_fee is not None else ' (seller)'
+        per = ' each' if obj.shipping_mode == 'per_item' else ' flat'
+        return f'${obj.shipping_rate}{per}{source}'
 
     @admin.display(description='Stock', ordering='quantity_remaining')
     def stock_display(self, obj):

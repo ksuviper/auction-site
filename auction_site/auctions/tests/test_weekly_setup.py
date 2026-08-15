@@ -9,6 +9,7 @@ covered below so neither can regress silently.
 
 import re
 from datetime import timedelta
+from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -334,3 +335,179 @@ class BulkFormsetRemovedTests(TestCase):
 
         with self.assertRaises(TemplateDoesNotExist):
             get_template('weekly_setup/listings.html')
+
+
+class ListingShippingFeeTests(WeeklySetupTestCase):
+    """Buy It Now listings can price their own shipping.
+
+    Shipping used to live only on the Seller, so the add-listing page offered a
+    mode (flat vs per item) with no amount anywhere — nothing to price a plant
+    that ships differently from the rest of the seller's stock.
+    """
+
+    def test_form_offers_a_shipping_cost_field(self):
+        response = self.client.get(self.url)
+        html = response.content.decode()
+
+        self.assertIn('name="shipping_fee"', html)
+        self.assertIn('Shipping cost', html)
+
+    def test_it_defaults_to_the_sellers_standard_fee(self):
+        response = self.client.get(self.url)
+
+        # Decimal from the database, vs the string this fixture assigned.
+        self.assertEqual(
+            Decimal(str(response.context['form'].initial['shipping_fee'])),
+            Decimal(str(self.seller.shipping_fee)),
+        )
+
+    def test_help_text_names_the_sellers_fallback(self):
+        response = self.client.get(self.url)
+
+        self.assertContains(response, 'Sunny Gardens')
+        self.assertContains(response, '5.00')
+
+    def test_a_per_listing_fee_is_saved(self):
+        self.client.post(self.url, self.payload(
+            title='Heavy Fan', listing_type='buy_now', start_price='',
+            buy_now_price='20.00', quantity_available='3',
+            shipping_mode='flat', shipping_fee='9.50',
+        ))
+
+        listing = AuctionListing.objects.get(title='Heavy Fan')
+        self.assertEqual(str(listing.shipping_fee), '9.50')
+        self.assertEqual(listing.shipping_rate, Decimal('9.50'))
+
+    def test_blank_falls_back_to_the_seller_fee(self):
+        self.client.post(self.url, self.payload(
+            title='Standard Fan', listing_type='buy_now', start_price='',
+            buy_now_price='20.00', quantity_available='3',
+            shipping_mode='flat', shipping_fee='',
+        ))
+
+        listing = AuctionListing.objects.get(title='Standard Fan')
+        self.assertIsNone(listing.shipping_fee)
+        self.assertEqual(listing.shipping_rate, Decimal('5.00'))
+
+    def test_flat_fee_is_charged_once(self):
+        self.client.post(self.url, self.payload(
+            title='Flat Ship', listing_type='buy_now', start_price='',
+            buy_now_price='20.00', quantity_available='5',
+            shipping_mode='flat', shipping_fee='9.50',
+        ))
+
+        listing = AuctionListing.objects.get(title='Flat Ship')
+        self.assertEqual(listing.shipping_for(4), Decimal('9.50'))
+
+    def test_per_item_fee_is_multiplied(self):
+        self.client.post(self.url, self.payload(
+            title='Per Item Ship', listing_type='buy_now', start_price='',
+            buy_now_price='20.00', quantity_available='5',
+            shipping_mode='per_item', shipping_fee='3.00',
+        ))
+
+        listing = AuctionListing.objects.get(title='Per Item Ship')
+        self.assertEqual(listing.shipping_for(4), Decimal('12.00'))
+
+    def test_auction_listings_do_not_keep_a_listing_fee(self):
+        """The input is hidden for auctions but still posts its prefilled value."""
+        self.client.post(self.url, self.payload(
+            title='Just An Auction', shipping_fee='9.50',
+        ))
+
+        listing = AuctionListing.objects.get(title='Just An Auction')
+        self.assertIsNone(listing.shipping_fee)
+        # Auctions settle from the seller's fee when they close.
+        self.assertEqual(listing.shipping_rate, Decimal('5.00'))
+
+    def test_changing_the_seller_fee_does_not_move_a_priced_listing(self):
+        self.client.post(self.url, self.payload(
+            title='Fixed Ship', listing_type='buy_now', start_price='',
+            buy_now_price='20.00', quantity_available='2',
+            shipping_mode='flat', shipping_fee='9.50',
+        ))
+
+        self.seller.shipping_fee = '99.00'
+        self.seller.save(update_fields=['shipping_fee'])
+
+        listing = AuctionListing.objects.get(title='Fixed Ship')
+        self.assertEqual(listing.shipping_rate, Decimal('9.50'))
+
+
+class ShippingFeeAtPurchaseTests(TestCase):
+    """The fee a buyer is charged comes from the listing, end to end."""
+
+    def setUp(self):
+        from auctions.models import Subscription
+
+        self.category = AuctionCategory.objects.create(name='Daylilies')
+        self.seller = Seller.objects.create(
+            name='Ship Seller', accepted_payment_methods='PayPal',
+            shipping_fee='5.00',
+        )
+        self.buyer = User.objects.create_user('shipbuyer', 'shipbuyer@example.com', 'pw')
+        Subscription.objects.create(user=self.buyer, plan='monthly', status='active')
+        self.buyer.profile.country = 'US'
+        self.buyer.profile.save(update_fields=['country'])
+        self.client.force_login(self.buyer)
+
+    def _listing(self, **kwargs):
+        now = timezone.now()
+        defaults = dict(
+            title='Shippable',
+            category=self.category,
+            seller=self.seller,
+            start_price='1.00',
+            listing_type='buy_now',
+            buy_now_price='10.00',
+            quantity_available=5,
+            starts_at=now - timedelta(days=1),
+            ends_at=now + timedelta(days=7),
+            is_active=True,
+        )
+        defaults.update(kwargs)
+        return AuctionListing.objects.create(**defaults)
+
+    def _buy(self, listing, quantity):
+        return self.client.post(
+            reverse('buy_now', kwargs={'pk': listing.pk}), {'quantity': quantity}
+        )
+
+    def test_invoice_uses_the_listing_fee(self):
+        from auctions.models import Invoice
+
+        listing = self._listing(shipping_fee='9.50', shipping_mode='flat')
+
+        self._buy(listing, 2)
+
+        invoice = Invoice.objects.get(listing=listing)
+        self.assertEqual(str(invoice.shipping_fee), '9.50')
+
+    def test_invoice_multiplies_a_per_item_listing_fee(self):
+        from auctions.models import Invoice
+
+        listing = self._listing(shipping_fee='3.00', shipping_mode='per_item')
+
+        self._buy(listing, 3)
+
+        invoice = Invoice.objects.get(listing=listing)
+        self.assertEqual(str(invoice.shipping_fee), '9.00')
+
+    def test_invoice_falls_back_to_the_seller_fee(self):
+        from auctions.models import Invoice
+
+        listing = self._listing(shipping_fee=None, shipping_mode='flat')
+
+        self._buy(listing, 2)
+
+        invoice = Invoice.objects.get(listing=listing)
+        self.assertEqual(str(invoice.shipping_fee), '5.00')
+
+    def test_listing_page_shows_the_shipping_amount(self):
+        listing = self._listing(shipping_fee='9.50', shipping_mode='flat')
+
+        response = self.client.get(
+            reverse('listing_detail', kwargs={'pk': listing.pk})
+        )
+
+        self.assertContains(response, '9.50')

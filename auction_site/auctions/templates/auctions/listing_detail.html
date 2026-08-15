@@ -175,9 +175,11 @@
         <div class="form-text fs-6">
           Shipping is
           {% if listing.shipping_mode == 'per_item' %}
-          charged per item, so it is multiplied by the quantity you buy.
+          <strong>${{ listing.shipping_rate }} per item</strong>, so it is
+          multiplied by the quantity you buy.
           {% else %}
-          a flat fee — you pay it once no matter how many you buy.
+          a flat <strong>${{ listing.shipping_rate }}</strong> — you pay it once
+          no matter how many you buy.
           {% endif %}
         </div>
       </div>
