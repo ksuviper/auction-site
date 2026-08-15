@@ -1,0 +1,314 @@
+{% extends "base.html" %}
+
+{% block title %}Weekly Setup — Add a Listing{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-xl-9">
+
+    <!-- Progress indicator -->
+    <div class="d-flex align-items-center gap-2 mb-4">
+      <span class="badge bg-success fs-6 px-3 py-2"><i class="fas fa-check"></i> Seller</span>
+      <div class="flex-grow-1 border-top"></div>
+      <span class="badge bg-primary fs-6 px-3 py-2">2 Listings</span>
+      <div class="flex-grow-1 border-top"></div>
+      <span class="badge bg-secondary fs-6 px-3 py-2">3 Done</span>
+    </div>
+
+    <div class="d-flex align-items-center justify-content-between mb-1">
+      <h1 class="h2 mb-0">Add a Listing</h1>
+      <a href="{% url 'weekly_setup' %}" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left me-1"></i>Change Seller
+      </a>
+    </div>
+    <p class="text-muted fs-5 mb-4">
+      Seller: <strong>{{ seller.name }}</strong>
+      {% if seller.active_week %}&nbsp;·&nbsp; Week of <strong>{{ seller.active_week }}</strong>{% endif %}
+    </p>
+
+    <!-- ── Creation form — the point of the page ─────────────────────────── -->
+    <div class="card shadow-sm mb-5">
+      <div class="card-body p-4 p-md-5">
+
+        <form method="post" enctype="multipart/form-data" novalidate>
+          {% csrf_token %}
+
+          {% if form.non_field_errors %}
+          <div class="alert alert-danger fs-5">{{ form.non_field_errors|join:", " }}</div>
+          {% endif %}
+
+          <div class="mb-4">
+            <label for="{{ form.title.id_for_label }}" class="form-label fw-semibold fs-5">
+              Plant name <span class="text-danger">*</span>
+            </label>
+            {{ form.title }}
+            {% if form.title.errors %}
+            <div class="text-danger fw-semibold">{{ form.title.errors|join:", " }}</div>
+            {% endif %}
+          </div>
+
+          <div class="mb-4">
+            <label for="{{ form.description.id_for_label }}" class="form-label fw-semibold fs-5">
+              Description
+            </label>
+            {{ form.description }}
+            {% if form.description.errors %}
+            <div class="text-danger fw-semibold">{{ form.description.errors|join:", " }}</div>
+            {% endif %}
+          </div>
+
+          <div class="mb-4">
+            <label for="{{ form.image.id_for_label }}" class="form-label fw-semibold fs-5">
+              Photo
+            </label>
+            {{ form.image }}
+            <img id="image-preview" alt="" class="mt-3 rounded shadow-sm d-none"
+                 style="max-height:180px;width:auto;">
+            {% if form.image.errors %}
+            <div class="text-danger fw-semibold">{{ form.image.errors|join:", " }}</div>
+            {% endif %}
+          </div>
+
+          <div class="row g-4 mb-4">
+            <div class="col-md-6">
+              <label for="{{ form.category.id_for_label }}" class="form-label fw-semibold fs-5">
+                Category <span class="text-danger">*</span>
+              </label>
+              {{ form.category }}
+              {% if form.category.errors %}
+              <div class="text-danger fw-semibold">{{ form.category.errors|join:", " }}</div>
+              {% endif %}
+            </div>
+            <div class="col-md-6">
+              <label for="{{ form.listing_type.id_for_label }}" class="form-label fw-semibold fs-5">
+                Listing type <span class="text-danger">*</span>
+              </label>
+              {{ form.listing_type }}
+              {% if form.listing_type.errors %}
+              <div class="text-danger fw-semibold">{{ form.listing_type.errors|join:", " }}</div>
+              {% endif %}
+            </div>
+          </div>
+
+          <!-- Auction-only pricing -->
+          <div class="row g-4 mb-4 auction-only">
+            <div class="col-md-6">
+              <label for="{{ form.start_price.id_for_label }}" class="form-label fw-semibold fs-5">
+                Starting price <span class="text-danger">*</span>
+              </label>
+              {{ form.start_price }}
+              <div class="form-text fs-6">{{ form.start_price.help_text }}</div>
+              {% if form.start_price.errors %}
+              <div class="text-danger fw-semibold">{{ form.start_price.errors|join:", " }}</div>
+              {% endif %}
+            </div>
+            <div class="col-md-6">
+              <label for="{{ form.reserve_price.id_for_label }}" class="form-label fw-semibold fs-5">
+                Reserve price
+              </label>
+              {{ form.reserve_price }}
+              <div class="form-text fs-6">{{ form.reserve_price.help_text }}</div>
+              {% if form.reserve_price.errors %}
+              <div class="text-danger fw-semibold">{{ form.reserve_price.errors|join:", " }}</div>
+              {% endif %}
+            </div>
+          </div>
+
+          <!-- Buy It Now-only pricing and stock -->
+          <div class="row g-4 mb-4 buy-now-only">
+            <div class="col-md-4">
+              <label for="{{ form.buy_now_price.id_for_label }}" class="form-label fw-semibold fs-5">
+                Price each <span class="text-danger">*</span>
+              </label>
+              {{ form.buy_now_price }}
+              {% if form.buy_now_price.errors %}
+              <div class="text-danger fw-semibold">{{ form.buy_now_price.errors|join:", " }}</div>
+              {% endif %}
+            </div>
+            <div class="col-md-4">
+              <label for="{{ form.quantity_available.id_for_label }}" class="form-label fw-semibold fs-5">
+                How many <span class="text-danger">*</span>
+              </label>
+              {{ form.quantity_available }}
+              <div class="form-text fs-6">{{ form.quantity_available.help_text }}</div>
+              {% if form.quantity_available.errors %}
+              <div class="text-danger fw-semibold">{{ form.quantity_available.errors|join:", " }}</div>
+              {% endif %}
+            </div>
+            <div class="col-md-4">
+              <label for="{{ form.shipping_mode.id_for_label }}" class="form-label fw-semibold fs-5">
+                Shipping
+              </label>
+              {{ form.shipping_mode }}
+              <div class="form-text fs-6">{{ form.shipping_mode.help_text }}</div>
+              {% if form.shipping_mode.errors %}
+              <div class="text-danger fw-semibold">{{ form.shipping_mode.errors|join:", " }}</div>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="row g-4 mb-4">
+            <div class="col-md-6">
+              <label for="{{ form.starts_at.id_for_label }}" class="form-label fw-semibold fs-5">
+                Starts <span class="text-danger">*</span>
+              </label>
+              {{ form.starts_at }}
+              {% if form.starts_at.errors %}
+              <div class="text-danger fw-semibold">{{ form.starts_at.errors|join:", " }}</div>
+              {% endif %}
+            </div>
+            <div class="col-md-6">
+              <label for="{{ form.ends_at.id_for_label }}" class="form-label fw-semibold fs-5">
+                Ends <span class="text-danger">*</span>
+              </label>
+              {{ form.ends_at }}
+              {% if form.ends_at.errors %}
+              <div class="text-danger fw-semibold">{{ form.ends_at.errors|join:", " }}</div>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="d-flex flex-column flex-sm-row gap-2">
+            <button type="submit" class="btn btn-primary btn-lg fw-semibold flex-grow-1">
+              <i class="fas fa-plus me-2"></i>Add This Listing
+            </button>
+            <a href="{% url 'weekly_setup_done' seller.pk %}" class="btn btn-outline-secondary btn-lg">
+              <i class="fas fa-check me-2"></i>Finish
+            </a>
+          </div>
+        </form>
+
+      </div>
+    </div>
+
+    <!-- ── Read-only reference list ──────────────────────────────────────── -->
+    {% comment %}
+    Display only: no form, no checkboxes, no inline editing, no delete. Editing
+    and deleting live in the Django admin, and duplicating them here would give
+    two places to change the same thing. The one link per row opens the admin.
+    {% endcomment %}
+    <section id="existing-listings">
+      <h2 class="h4 mb-1">Listings for {{ seller.name }}</h2>
+      <p class="text-muted mb-3">
+        {{ listings|length }} so far, newest first. To change or remove one, open
+        it in the admin.
+      </p>
+
+      {% if listings %}
+      <div class="card shadow-sm">
+        <div class="table-responsive" style="max-height:420px;overflow-y:auto;">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th style="width:70px;">Photo</th>
+                <th>Title</th>
+                <th>Type</th>
+                <th class="text-end">Price</th>
+                <th class="text-end">Qty</th>
+                <th>Starts</th>
+                <th>Ends</th>
+                <th style="width:110px;"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for listing in listings %}
+              <tr>
+                <td>
+                  {% if listing.image %}
+                  <img src="{{ listing.image.url }}" alt=""
+                       style="height:44px;width:44px;object-fit:cover;border-radius:4px;">
+                  {% else %}
+                  <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+                <td class="fw-semibold">{{ listing.title }}</td>
+                <td>
+                  {% if listing.listing_type == 'buy_now' %}
+                  <span class="badge bg-success">Buy It Now</span>
+                  {% else %}
+                  <span class="badge bg-secondary">Auction</span>
+                  {% endif %}
+                </td>
+                <td class="text-end">
+                  {% if listing.listing_type == 'buy_now' %}
+                  ${{ listing.buy_now_price }}
+                  {% else %}
+                  ${{ listing.start_price }}
+                  {% endif %}
+                </td>
+                <td class="text-end">
+                  {% if listing.listing_type == 'buy_now' %}
+                  {{ listing.units_remaining }} of {{ listing.quantity_available }}
+                  {% else %}
+                  <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+                <td class="text-nowrap">{{ listing.starts_at|date:"M j, g:i a" }}</td>
+                <td class="text-nowrap">{{ listing.ends_at|date:"M j, g:i a" }}</td>
+                <td class="text-end">
+                  <a href="{% url 'admin:auctions_auctionlisting_change' listing.pk %}"
+                     class="btn btn-sm btn-outline-secondary">View in admin</a>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% else %}
+      <div class="card shadow-sm">
+        <div class="card-body text-muted text-center py-4">
+          Nothing added yet — the first listing you add will appear here.
+        </div>
+      </div>
+      {% endif %}
+    </section>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ block.super }}
+<script>
+// Same toggle pattern the bulk grid used: show only the fields that belong to
+// the chosen listing type.
+(function () {
+  var select = document.querySelector('.listing-type-select');
+  if (!select) { return; }
+  var buyNow = document.querySelectorAll('.buy-now-only');
+  var auction = document.querySelectorAll('.auction-only');
+
+  function sync() {
+    var isBuyNow = select.value === 'buy_now';
+    buyNow.forEach(function (el) { el.style.display = isBuyNow ? '' : 'none'; });
+    auction.forEach(function (el) { el.style.display = isBuyNow ? 'none' : ''; });
+  }
+  select.addEventListener('change', sync);
+  sync();
+})();
+
+// Thumbnail preview so the admin can see they picked the right photo before
+// saving, rather than finding out on the listing page afterwards.
+(function () {
+  var input = document.getElementById('id_image');
+  var preview = document.getElementById('image-preview');
+  if (!input || !preview) { return; }
+
+  input.addEventListener('change', function () {
+    var file = input.files && input.files[0];
+    if (!file) {
+      preview.classList.add('d-none');
+      preview.removeAttribute('src');
+      return;
+    }
+    var reader = new FileReader();
+    reader.onload = function (event) {
+      preview.src = event.target.result;
+      preview.classList.remove('d-none');
+    };
+    reader.readAsDataURL(file);
+  });
+})();
+</script>
+{% endblock %}

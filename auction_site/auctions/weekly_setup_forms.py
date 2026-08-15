@@ -1,5 +1,4 @@
 from django import forms
-from django.forms import formset_factory
 
 from .models import AuctionCategory, AuctionListing, Seller
 
@@ -24,11 +23,12 @@ class WeeklySellerForm(forms.Form):
         help_text='Only required when using an existing seller.',
     )
 
-    # Fields for creating / reviewing a seller
-    category = forms.ModelChoiceField(
-        queryset=AuctionCategory.objects.filter(is_active=True),
-        required=False,
-    )
+    # Fields for creating / reviewing a seller.
+    #
+    # No category here: Seller.category was removed in migration 0005, and this
+    # form still passed it to Seller.objects.create(), so creating a new seller
+    # raised TypeError. Category belongs to the listing now, and the
+    # add-listing form asks for it there.
     name = forms.CharField(max_length=200, required=False)
     email = forms.EmailField(required=False, help_text='Optional — for auction-end notifications.')
     bio = forms.CharField(widget=forms.Textarea(attrs={'rows': 3}), required=False)
@@ -52,7 +52,6 @@ class WeeklySellerForm(forms.Form):
                 self.add_error('existing_seller', 'Please select a seller.')
         else:
             required = {
-                'category': 'Category',
                 'name': 'Name',
                 'accepted_payment_methods': 'Accepted payment methods',
                 'shipping_fee': 'Shipping fee',
@@ -68,7 +67,6 @@ class WeeklySellerForm(forms.Form):
         if self.cleaned_data['seller_mode'] == 'existing':
             return self.cleaned_data['existing_seller']
         return Seller.objects.create(
-            category=self.cleaned_data['category'],
             name=self.cleaned_data['name'],
             email=self.cleaned_data.get('email') or '',
             bio=self.cleaned_data.get('bio') or '',
@@ -78,37 +76,94 @@ class WeeklySellerForm(forms.Form):
         )
 
 
-class WeeklyListingForm(forms.ModelForm):
-    """One row in the bulk-listing formset."""
+class AuctionListingForm(forms.ModelForm):
+    """Create one listing at a time for a given seller.
+
+    Replaces the old six-row formset. Everything a listing needs is asked for
+    here, including category — the previous flow collected no category and the
+    view set none, so saving raised NOT NULL on auctions_auctionlisting.category_id
+    and no listing was ever created through weekly setup.
+    """
 
     class Meta:
         model = AuctionListing
         fields = [
-            'title', 'description', 'listing_type', 'start_price', 'buy_now_price',
-            'quantity_available', 'shipping_mode',
-            'reserve_price', 'starts_at', 'ends_at', 'image',
+            'title', 'description', 'image', 'category', 'listing_type',
+            'start_price', 'reserve_price',
+            'buy_now_price', 'quantity_available', 'shipping_mode',
+            'starts_at', 'ends_at',
         ]
         widgets = {
+            'title': forms.TextInput(attrs={
+                'class': 'form-control form-control-lg',
+                'placeholder': 'e.g. Stella de Oro',
+                'autofocus': 'autofocus',
+            }),
+            'description': forms.Textarea(attrs={
+                'class': 'form-control form-control-lg', 'rows': 4,
+            }),
+            'image': forms.ClearableFileInput(attrs={
+                'class': 'form-control form-control-lg',
+                'accept': 'image/*',
+                'id': 'id_image',
+            }),
+            'category': forms.Select(attrs={'class': 'form-select form-select-lg'}),
+            'listing_type': forms.Select(attrs={
+                'class': 'form-select form-select-lg listing-type-select',
+            }),
+            'start_price': forms.NumberInput(attrs={
+                'class': 'form-control form-control-lg', 'step': '0.01', 'min': '0',
+            }),
+            'reserve_price': forms.NumberInput(attrs={
+                'class': 'form-control form-control-lg', 'step': '0.01', 'min': '0',
+            }),
+            'buy_now_price': forms.NumberInput(attrs={
+                'class': 'form-control form-control-lg', 'step': '0.01', 'min': '0',
+            }),
+            'quantity_available': forms.NumberInput(attrs={
+                'class': 'form-control form-control-lg', 'min': 1, 'step': 1,
+            }),
+            'shipping_mode': forms.Select(attrs={'class': 'form-select form-select-lg'}),
             'starts_at': forms.DateTimeInput(
-                attrs={'type': 'datetime-local'},
+                attrs={'class': 'form-control form-control-lg', 'type': 'datetime-local'},
                 format='%Y-%m-%dT%H:%M',
             ),
             'ends_at': forms.DateTimeInput(
-                attrs={'type': 'datetime-local'},
+                attrs={'class': 'form-control form-control-lg', 'type': 'datetime-local'},
                 format='%Y-%m-%dT%H:%M',
             ),
-            'description': forms.Textarea(attrs={'rows': 2}),
-            'listing_type': forms.Select(attrs={'class': 'listing-type-select'}),
-            'quantity_available': forms.NumberInput(attrs={'min': 1, 'step': 1}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # All fields optional at the Django level — we skip blank rows in the view.
-        for field in self.fields.values():
-            field.required = False
-        self.fields['starts_at'].input_formats = ['%Y-%m-%dT%H:%M', '%Y-%m-%d %H:%M']
-        self.fields['ends_at'].input_formats = ['%Y-%m-%dT%H:%M', '%Y-%m-%d %H:%M']
+
+        self.fields['category'].queryset = AuctionCategory.objects.filter(
+            is_active=True
+        )
+        self.fields['category'].empty_label = '— choose a category —'
+
+        for name in ('starts_at', 'ends_at'):
+            self.fields[name].input_formats = ['%Y-%m-%dT%H:%M', '%Y-%m-%d %H:%M']
+
+        # Required on every listing; the type-specific prices are checked in
+        # clean(), since which of them is needed depends on listing_type.
+        for name in ('title', 'category', 'listing_type', 'starts_at', 'ends_at'):
+            self.fields[name].required = True
+        # shipping_mode has a model default but no blank=True, so the ModelForm
+        # would demand it on every listing — including auctions, which never
+        # show the field. clean() falls back to the model default.
+        for name in ('start_price', 'buy_now_price', 'quantity_available',
+                     'shipping_mode'):
+            self.fields[name].required = False
+
+        # PositiveIntegerField contributes min_value=0, which overrides the
+        # widget attr from Meta; a listing of zero units is not a listing.
+        self.fields['quantity_available'].widget.attrs['min'] = 1
+
+        self.fields['start_price'].help_text = 'Opening bid for an auction.'
+        self.fields['reserve_price'].help_text = (
+            'Optional. The listing will not sell below this.'
+        )
         self.fields['quantity_available'].help_text = 'How many units are for sale.'
         self.fields['shipping_mode'].help_text = (
             'Flat fee: buyer pays shipping once no matter how many they buy. '
@@ -116,36 +171,33 @@ class WeeklyListingForm(forms.ModelForm):
         )
 
     def clean(self):
-        """Require the Buy It Now fields on rows that are actually buy_now.
-
-        Every field is optional at the Django level so blank spare rows can be
-        ignored, which means these two have to be checked here — otherwise a
-        buy_now row could be saved with no price, or fall back to the
-        single-unit default when the seller meant to enter a real count.
-        """
         cleaned = super().clean()
-        if not cleaned.get('title'):
-            # A blank spare row; the view skips it.
-            return cleaned
+        listing_type = cleaned.get('listing_type')
 
-        if cleaned.get('listing_type') == 'buy_now':
+        if listing_type == 'buy_now':
             if not cleaned.get('buy_now_price'):
-                self.add_error(
-                    'buy_now_price', 'Required for a Buy It Now listing.'
-                )
+                self.add_error('buy_now_price', 'Required for a Buy It Now listing.')
             if not cleaned.get('quantity_available'):
                 self.add_error(
-                    'quantity_available',
-                    'Enter how many units are available.',
+                    'quantity_available', 'Enter how many units are available.'
                 )
+            # start_price is NOT NULL on the model but means nothing for a fixed
+            # price sale, so it is not asked for. Mirror the Buy It Now price so
+            # anything reading it sees the real price rather than 0.
+            if cleaned.get('buy_now_price') and not cleaned.get('start_price'):
+                cleaned['start_price'] = cleaned['buy_now_price']
+            if not cleaned.get('shipping_mode'):
+                cleaned['shipping_mode'] = 'flat'
+        else:
+            if not cleaned.get('start_price'):
+                self.add_error('start_price', 'Required for an auction listing.')
+            # Buy It Now inputs may carry stale values from a switched type.
+            cleaned['buy_now_price'] = None
+            cleaned['quantity_available'] = None
+            cleaned['shipping_mode'] = 'flat'
+
+        starts_at, ends_at = cleaned.get('starts_at'), cleaned.get('ends_at')
+        if starts_at and ends_at and ends_at <= starts_at:
+            self.add_error('ends_at', 'The end time must be after the start time.')
+
         return cleaned
-
-    def is_empty(self):
-        return not self.cleaned_data.get('title')
-
-    def has_required_data(self):
-        d = self.cleaned_data
-        return bool(d.get('title') and d.get('start_price') and d.get('starts_at') and d.get('ends_at'))
-
-
-WeeklyListingFormSet = formset_factory(WeeklyListingForm, extra=6, can_delete=True)

@@ -10,8 +10,8 @@ admin action is only needed at the start (setup) and end (invoices).
 **Where:** `/admin/weekly-setup/`  (navbar: *Weekly Setup*)
 
 1. Choose **"Create a new seller"** or **"Use an existing seller"**.
-2. If new: fill in name, category, accepted payment methods, shipping fee, and
-   the week's start date.
+2. If new: fill in name, accepted payment methods, shipping fee, and the week's
+   start date. (Category is set per listing in Step 2, not on the seller.)
 3. Click **Continue to Listings**.
 
 > **Tip:** If the same seller participates again in a future week, pick them from
@@ -19,30 +19,42 @@ admin action is only needed at the start (setup) and end (invoices).
 
 ---
 
-## Step 2 — Bulk upload plant listings with photos
+## Step 2 — Add plant listings, one at a time
 
-**Where:** `/admin/weekly-setup/<seller>/listings/`  (arrives here automatically after Step 1)
+**Where:** `/admin/weekly-setup/<seller>/add-listing/`  (arrives here automatically after Step 1)
 
-Fill in one row per plant:
+One plant per form. Fill it in, click **Add This Listing**, and the same page
+comes back empty and ready for the next one — you never have to navigate between
+entries.
 
 | Field | Notes |
 |---|---|
-| Title | Plant cultivar name |
-| Description | Optional — color, height, bloom time, etc. |
-| Start Price | Opening bid in dollars |
-| Reserve | Optional minimum acceptable price |
-| Starts At | Date + time the bidding opens |
-| Ends At | Date + time the bidding closes |
-| Image | JPG/PNG photo of the plant |
+| Plant name | Cultivar name |
+| Description | Optional — colour, height, bloom time, etc. |
+| Photo | JPG/PNG. A thumbnail appears once you pick the file, so you can check it before saving. |
+| Category | Which category the plant is listed under |
+| Listing type | **Auction** or **Buy It Now** — the price fields change to match |
+| Starting price | Auction only: the opening bid |
+| Reserve price | Auction only, optional: the listing will not sell below this |
+| Price each | Buy It Now only |
+| How many | Buy It Now only: units for sale. Several buyers can each take some. |
+| Shipping | Buy It Now only: flat fee once, or multiplied by quantity |
+| Starts / Ends | Date + time bidding opens and closes |
 
-- Leave a row completely blank to skip it.
-- Click **Add another row** if you need more than six slots.
-- Click **Save All Listings** when done.
+**Category, start time and end time carry over to the next entry**, since a
+week's plants almost always share them. Everything else starts blank.
+
+Underneath the form is a read-only list of everything added for this seller so
+far, newest first, so you can see your entries land. It is for reference only —
+to change or remove a listing, use the **View in admin** link on its row.
+
+When you have added everything, click **Finish**.
 
 > **Tip:** To re-use a listing from a previous week, go to the Django admin
 > → Auction Listings, select the listing, and choose the
 > **"Duplicate listing(s) for re-use next week"** action.
-> Then update the dates on the copy.
+> Then update the dates on the copy. A duplicated Buy It Now listing starts
+> fully in stock again.
 
 ---
 
@@ -50,7 +62,7 @@ Fill in one row per plant:
 
 Listings go live automatically at their `starts_at` time — no manual action needed.
 
-If you need to adjust times after upload:
+If you need to adjust times after adding a listing:
 - Go to Django admin → Auction Listings.
 - Edit the listing and update `starts_at` / `ends_at`.
 

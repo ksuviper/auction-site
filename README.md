@@ -8,7 +8,8 @@ and receive automated invoices when auctions close.
 
 ## Features
 
-- Weekly auction rotation with bulk listing upload
+- Weekly auction rotation, with listings added one at a time through a guided
+  setup flow
 - Automatic auction closing, winner assignment, and invoice generation (APScheduler)
 - Paid memberships via PayPal subscriptions, gating bidding and purchasing (US residents only)
 - Buy It Now listings alongside standard auctions, with per-listing stock so
@@ -160,8 +161,8 @@ sell one lot to one `winner`.
 | `shipping_mode` | `flat` — buyer pays shipping once no matter how many they buy. `per_item` — shipping is multiplied by the quantity. Chosen by the seller **per listing**. |
 | `Invoice.quantity` | Units on that invoice. One invoice per purchase, so one listing can have several. `Invoice.amount` is the line total (unit price × quantity), not the unit price. |
 
-Sellers set the quantity and shipping mode per row in **Weekly Setup**; both
-inputs appear only when the row's type is Buy It Now. Duplicating a listing in
+Sellers set the quantity and shipping mode on the **Weekly Setup** add-listing
+form; both inputs appear only when the listing type is Buy It Now. Duplicating a listing in
 the admin resets its stock to full rather than inheriting how far the original
 sold down.
 
