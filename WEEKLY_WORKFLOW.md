@@ -217,6 +217,7 @@ python manage.py deactivate_old_listings --dry-run
 | Page | URL |
 |---|---|
 | Add Listing | `/admin/weekly-setup/` |
+| Site images (banner, app icon) | `/admin/auctions/sitesettings/` |
 | Invoices (generate/review/send) | `/admin/combined-invoices/` |
 | Invoice Dashboard | `/admin/invoices/` |
 | Django Admin | `/admin/` |

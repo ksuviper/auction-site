@@ -91,6 +91,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'auction_site.context_processors.sidebar',
+                'auction_site.context_processors.site_settings',
             ],
         },
     },
@@ -373,6 +374,11 @@ UNFOLD = {
                 "separator": True,
                 "collapsible": False,
                 "items": [
+                    {
+                        "title": "Images",
+                        "icon": "image",
+                        "link": reverse_lazy("admin:auctions_sitesettings_changelist"),
+                    },
                     {
                         "title": "Pages",
                         "icon": "description",

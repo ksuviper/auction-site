@@ -45,9 +45,14 @@
   <!-- Main content -->
   <section class="col-12 col-lg-9">
 
-    <!-- Welcome banner -->
-    <div class="p-4 mb-4 rounded-3 border-start border-4 border-primary bg-light">
-      <h1 class="h3 fw-bold mb-1">Welcome to ASQ Daylily Auctions</h1>
+    {% comment %}
+      The heading comes first, then the welcome text under it. The banner used
+      to carry the <h1> itself and sit above everything, which put the page's
+      only heading inside a decorative box.
+    {% endcomment %}
+    <h1 class="h2 fw-bold mb-3">Welcome to ASQ Daylily Auctions</h1>
+
+    <div class="p-4 mb-5 rounded-3 border-start border-4 border-primary bg-light">
       <p class="mb-0 fs-5 text-muted">
         Discover and bid on premium daylilies from growers across the country.
         New sellers are featured each week.

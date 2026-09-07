@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load subscription_tags %}
 
 {% block title %}My Profile – Above Status Quo{% endblock %}
 
@@ -45,6 +46,46 @@
           </dd>
         </dl>
 
+      </div>
+    </div>
+
+    {% comment %}
+      Membership moved here out of the main navigation. It is a thing you
+      manage occasionally, like your address — not somewhere you go on most
+      visits.
+    {% endcomment %}
+    <div class="card shadow-sm mb-4">
+      <div class="card-body p-4">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+          <div>
+            <h2 class="h5 fw-bold mb-1">
+              <i class="fas fa-id-card me-2 text-secondary" aria-hidden="true"></i>Membership
+            </h2>
+            {% user_subscription_status request.user as sub_status %}
+            <p class="mb-0 fs-5">
+              {% if sub_status == 'active' %}
+              <span class="badge bg-success">Active</span>
+              You can bid and buy.
+              {% elif sub_status == 'lapsed' %}
+              <span class="badge bg-warning text-dark">Payment issue</span>
+              Sort this out to keep bidding.
+              {% elif sub_status == 'cancelled' %}
+              <span class="badge bg-secondary">Cancelled</span>
+              {% elif sub_status == 'pending' %}
+              <span class="badge bg-info text-dark">Pending</span>
+              Waiting on PayPal to confirm.
+              {% elif profile.subscription_required %}
+              <span class="text-muted">No membership yet — one is needed to bid or buy.</span>
+              {% else %}
+              <span class="badge bg-success">Not required</span>
+              An admin has exempted this account.
+              {% endif %}
+            </p>
+          </div>
+          <a href="{% url 'subscribe' %}" class="btn btn-outline-primary btn-lg">
+            Manage Membership
+          </a>
+        </div>
       </div>
     </div>
 

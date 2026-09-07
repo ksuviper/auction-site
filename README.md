@@ -41,6 +41,7 @@ A "seller" is a user account with the seller flag ticked — see
 - Browsing by category → seller → their plants, with a seller directory on each
   category page
 - Admin-managed FAQ, About Us, Terms of Service and Privacy Policy pages
+- Admin-uploaded header banner and app icon, as separate images
 - Mobile-first Bootstrap 5 UI with offcanvas category sidebar
 
 ---
@@ -310,6 +311,37 @@ email as "$50" and does not read as a price.
 ---
 
 ## Admin-Managed Content
+
+### Site images
+
+**Site Content → Images** holds two uploads on a `SiteSettings` singleton:
+
+| Field | Used as | Falls back to |
+|---|---|---|
+| `header_banner_image` | The image at the top of every page | `static/img/logo.png` |
+| `app_icon_image` | The browser tab icon and the phone home-screen icon (`rel="icon"` and `rel="apple-touch-icon"`) | `static/favicon.ico` |
+
+**They are separate fields on purpose** — a wide banner cropped square makes a
+bad icon, and a square icon stretched across the header looks worse — so
+neither is derived from the other.
+
+The row is pinned to `pk=1`: `SiteSettings.load()` returns it, creating it on
+first use, and `save()` forces the pk so no second row can appear by any route.
+The admin refuses both adding and deleting; **clearing a field** is how you go
+back to a built-in image. The context processor that reads it is wrapped, so a
+database problem gives a page with the built-in logo rather than a 500 on top
+of a 500.
+
+> **Not implemented: multi-size PWA icon generation.** Item 18 asked for
+> `generate_pwa_icons` to be repointed at this field and re-run automatically on
+> save. **This project has no PWA batch** — no manifest, no service worker, no
+> icon command, no `apple-touch-icon` before this change. So the icon is stored
+> and *used* (tab and home-screen icon), but nothing generates a 192/512 icon
+> set, because there is no manifest to consume one. When the PWA work lands, its
+> manifest should read `SiteSettings.app_icon_image` and generation can hook
+> into `SiteSettings.save()`.
+
+### Content pages
 
 Four pages are edited from the admin rather than in templates. All are under
 **Site Content** in the admin sidebar.

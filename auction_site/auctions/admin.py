@@ -22,6 +22,7 @@ from .models import (
     ListingComment,
     ProxyBid,
     SitePage,
+    SiteSettings,
     Subscription,
     UserProfile,
     Wishlist,
@@ -613,6 +614,85 @@ class FAQItemAdmin(ModelAdmin):
     # Model Meta already orders by display_order; repeated here because
     # list_editable on an ordering field is confusing without it being visible.
     ordering = ('display_order', 'question')
+
+
+@admin.register(SiteSettings)
+class SiteSettingsAdmin(ModelAdmin):
+    """
+    The one settings row, edited in place.
+
+    Adding and deleting are both refused: there is only ever one site, and
+    "removing" an image means clearing that field rather than dropping the row
+    the whole site reads on every page.
+    """
+
+    list_display = ('__str__', 'updated_at')
+    readonly_fields = ('updated_at', 'header_preview', 'icon_preview')
+    fieldsets = (
+        (
+            'Header banner',
+            {
+                'fields': ('header_banner_image', 'header_preview'),
+                'description': (
+                    'Shown at the top of every page, beside the site name. '
+                    'Wide images work best. Clear the field to go back to the '
+                    'built-in logo.'
+                ),
+            },
+        ),
+        (
+            'App icon',
+            {
+                'fields': ('app_icon_image', 'icon_preview'),
+                'description': (
+                    'Used as the browser tab icon and the home-screen icon on '
+                    'phones. Upload a <strong>square</strong> image — a wide '
+                    'banner cropped square looks bad, which is why this is a '
+                    'separate upload.'
+                ),
+            },
+        ),
+        (None, {'fields': ('updated_at',)}),
+    )
+
+    def has_add_permission(self, request):
+        """One site, one row — load() creates it, nobody adds a second."""
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        """Clearing an image is the way to remove one; see the model."""
+        return False
+
+    def changelist_view(self, request, extra_context=None):
+        """
+        Send anyone opening the list straight to the single row.
+
+        A changelist of exactly one row, with no add button, is a pointless
+        click — and the row has to exist for load() to work anyway.
+        """
+        settings_row = SiteSettings.load()
+        return redirect(
+            reverse('admin:auctions_sitesettings_change', args=[settings_row.pk])
+        )
+
+    @admin.display(description='Currently showing')
+    def header_preview(self, obj):
+        if obj.header_banner_image:
+            return mark_safe(
+                f'<img src="{obj.header_banner_image.url}" '
+                'style="max-height:120px;width:auto;border-radius:4px;" />'
+            )
+        return 'Using the built-in logo.'
+
+    @admin.display(description='Currently showing')
+    def icon_preview(self, obj):
+        if obj.app_icon_image:
+            return mark_safe(
+                f'<img src="{obj.app_icon_image.url}" '
+                'style="height:64px;width:64px;object-fit:cover;'
+                'border-radius:8px;border:1px solid #ddd;" />'
+            )
+        return 'Using the built-in favicon.'
 
 
 @admin.register(SitePage)

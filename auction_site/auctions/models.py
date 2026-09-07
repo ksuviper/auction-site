@@ -746,6 +746,72 @@ class Wishlist(models.Model):
         return f'{self.user.username} – "{self.listing_title_keyword}"'
 
 
+class SiteSettings(models.Model):
+    """
+    Site-wide images an admin can replace without touching the code.
+
+    A singleton: there is only ever one site, so ``SiteSettings.load()``
+    returns the single row (creating it on first use) and the admin refuses to
+    add a second.
+
+    The two images are separate on purpose. A wide header banner cropped square
+    for an app icon looks bad, and a square icon stretched across the header
+    looks worse — so neither is derived from the other.
+    """
+
+    header_banner_image = models.ImageField(
+        upload_to='site/', blank=True,
+        help_text=(
+            'The main image at the top of every page. Wide works best — it '
+            'sits beside the site name. Leave empty to use the built-in logo.'
+        ),
+    )
+    app_icon_image = models.ImageField(
+        upload_to='site/', blank=True,
+        help_text=(
+            'Square image used as the browser tab icon and the home-screen '
+            'icon on phones. Upload a square image — anything else will be '
+            'squashed by the browser. Leave empty to use the built-in favicon.'
+        ),
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Site settings'
+        verbose_name_plural = 'Site settings'
+
+    @classmethod
+    def load(cls):
+        """
+        The one settings row, created on first use.
+
+        Used by the context processor on every page render, so it must never
+        raise for a fresh install with no row yet.
+        """
+        settings_row, _ = cls.objects.get_or_create(pk=1)
+        return settings_row
+
+    def save(self, *args, **kwargs):
+        # Pinned to pk=1 so a second row cannot appear by any route — a stray
+        # POST, a fixture, a shell session — and load() always finds it.
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        """
+        Clearing the images is what "removing" means here.
+
+        Deleting the row would just have load() recreate it empty on the next
+        page view, so this does that directly and keeps pk=1 stable.
+        """
+        self.header_banner_image = ''
+        self.app_icon_image = ''
+        self.save()
+
+    def __str__(self) -> str:
+        return 'Site settings'
+
+
 class FAQItem(models.Model):
     """One question and answer on the public FAQ page, ordered by the admin."""
 
