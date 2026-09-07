@@ -73,8 +73,8 @@ class AuctionListingForm(forms.ModelForm):
         fields = [
             'title', 'description', 'image', 'category', 'listing_type',
             'start_price', 'reserve_price',
-            'buy_now_price', 'quantity_available', 'shipping_mode',
-            'shipping_fee',
+            'buy_now_price', 'quantity_available',
+            'additional_item_discount', 'shipping_mode', 'shipping_fee',
             'starts_at', 'ends_at',
         ]
         widgets = {
@@ -106,6 +106,9 @@ class AuctionListingForm(forms.ModelForm):
             }),
             'quantity_available': forms.NumberInput(attrs={
                 'class': 'form-control form-control-lg', 'min': 1, 'step': 1,
+            }),
+            'additional_item_discount': forms.NumberInput(attrs={
+                'class': 'form-control form-control-lg', 'step': '0.01', 'min': '0',
             }),
             'shipping_mode': forms.Select(attrs={'class': 'form-select form-select-lg'}),
             'shipping_fee': forms.NumberInput(attrs={
@@ -141,7 +144,8 @@ class AuctionListingForm(forms.ModelForm):
         # would demand it on every listing — including auctions, which never
         # show the field. clean() falls back to the model default.
         for name in ('start_price', 'buy_now_price', 'quantity_available',
-                     'shipping_mode', 'shipping_fee'):
+                     'additional_item_discount', 'shipping_mode',
+                     'shipping_fee'):
             self.fields[name].required = False
 
         # PositiveIntegerField contributes min_value=0, which overrides the
@@ -153,6 +157,12 @@ class AuctionListingForm(forms.ModelForm):
             'Optional. The listing will not sell below this.'
         )
         self.fields['quantity_available'].help_text = 'How many units are for sale.'
+        self.fields['additional_item_discount'].label = 'Multi-buy discount'
+        self.fields['additional_item_discount'].help_text = (
+            'Optional. Taken off each plant after the first, so a $12 plant '
+            'with a $3 discount costs $12 + $9 + $9 for three. Leave blank for '
+            'no discount.'
+        )
         self.fields['shipping_mode'].help_text = (
             'Flat fee: buyer pays shipping once no matter how many they buy. '
             'Per item: shipping is multiplied by the quantity they buy.'
@@ -189,12 +199,24 @@ class AuctionListingForm(forms.ModelForm):
                 cleaned['start_price'] = cleaned['buy_now_price']
             if not cleaned.get('shipping_mode'):
                 cleaned['shipping_mode'] = 'flat'
+            # The column is NOT NULL with a default of 0; a blank box means
+            # "no discount", not "leave it unset".
+            if cleaned.get('additional_item_discount') in (None, ''):
+                cleaned['additional_item_discount'] = 0
+            price = cleaned.get('buy_now_price')
+            discount = cleaned.get('additional_item_discount')
+            if price and discount and discount > price:
+                self.add_error(
+                    'additional_item_discount',
+                    f'The discount cannot be more than the price of ${price}.',
+                )
         else:
             if not cleaned.get('start_price'):
                 self.add_error('start_price', 'Required for an auction listing.')
             # Buy It Now inputs may carry stale values from a switched type.
             cleaned['buy_now_price'] = None
             cleaned['quantity_available'] = None
+            cleaned['additional_item_discount'] = 0
             cleaned['shipping_mode'] = 'flat'
             # Auction shipping is settled from the seller's fee when the auction
             # closes, so a per-listing amount would be collected and never used.

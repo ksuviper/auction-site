@@ -69,6 +69,7 @@ entries.
 | Reserve price | Auction only, optional: the listing will not sell below this |
 | Price each | Buy It Now only |
 | How many | Buy It Now only: units for sale. Several buyers can each take some. |
+| Multi-buy discount | Buy It Now only, optional: taken off each plant *after the first*. A $12 plant with $3 here costs $12 + $9 + $9 for three. Leave blank for no discount — it cannot be more than the price. |
 | Shipping cost | Buy It Now only: what the buyer pays to ship this plant. Starts at the seller's standard fee (from Step 0); change it for a plant that ships differently. Leave blank to always follow the seller's fee. |
 | Charged how? | Buy It Now only: the shipping cost once per order (flat), or multiplied by the quantity bought (per item) |
 | Starts / Ends | Date + time bidding opens and closes |

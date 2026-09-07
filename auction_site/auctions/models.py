@@ -256,6 +256,14 @@ class AuctionListing(models.Model):
             'purchases come in.'
         ),
     )
+    additional_item_discount = models.DecimalField(
+        max_digits=6, decimal_places=2, default=0, blank=True,
+        help_text=(
+            'Amount off each unit beyond the first, for Buy It Now listings. '
+            'Set per listing by the admin — buy 3 of a $12 plant with a $3 '
+            'discount and it costs $12 + $9 + $9. Leave at 0 for no discount.'
+        ),
+    )
     shipping_mode = models.CharField(
         max_length=10,
         choices=SHIPPING_MODE_CHOICES,
@@ -308,6 +316,24 @@ class AuctionListing(models.Model):
                         'quantity_available':
                             'Buy It Now listings require a quantity of at '
                             'least 1.'
+                    }
+                )
+            # A discount above the price would make extra units free, and the
+            # arithmetic floors at zero rather than paying the buyer — so an
+            # over-large discount is silently capped instead of doing what was
+            # typed. Refusing it here means the number on screen is the number
+            # charged.
+            discount = self.additional_item_discount or 0
+            if discount < 0:
+                raise ValidationError(
+                    {'additional_item_discount': 'A discount cannot be negative.'}
+                )
+            if discount > self.buy_now_price:
+                raise ValidationError(
+                    {
+                        'additional_item_discount':
+                            f'The discount cannot exceed the price of '
+                            f'${self.buy_now_price}.'
                     }
                 )
 
@@ -366,6 +392,41 @@ class AuctionListing(models.Model):
     @property
     def is_sold_out(self) -> bool:
         return self.listing_type == 'buy_now' and self.units_remaining == 0
+
+    @property
+    def additional_unit_price(self):
+        """
+        What each unit beyond the first costs.
+
+        Floored at zero: the field validation refuses a discount larger than
+        the price, but a listing saved before that check existed — or written
+        by a bulk update, which does not run clean() — must not price a plant
+        below nothing.
+        """
+        if self.buy_now_price is None:
+            return Decimal('0.00')
+        price = Decimal(str(self.buy_now_price))
+        discount = Decimal(str(self.additional_item_discount or 0))
+        return max(price - discount, Decimal('0.00'))
+
+    @property
+    def has_quantity_discount(self) -> bool:
+        return bool(
+            self.listing_type == 'buy_now' and self.additional_item_discount
+        )
+
+    def price_for(self, quantity: int):
+        """
+        The item total for ``quantity`` units, before shipping.
+
+        Full price for the first, ``additional_unit_price`` for each after it.
+        One definition, used by the purchase view, the listing page and the
+        invoice emails — three places that must agree about what a buyer owes.
+        """
+        if self.buy_now_price is None or quantity < 1:
+            return Decimal('0.00')
+        first = Decimal(str(self.buy_now_price))
+        return first + (quantity - 1) * self.additional_unit_price
 
     @property
     def shipping_rate(self):

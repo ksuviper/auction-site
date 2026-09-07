@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core import mail
+from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.db import connection
@@ -774,3 +775,354 @@ class CloseEndedBuyNowTests(TestCase):
 
         self.assertIn('closed=1', out.getvalue())
         self.assertEqual(len(mail.outbox), 1)
+
+
+@override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
+class MultiBuyDiscountTests(TestCase):
+    """
+    A per-listing discount on every unit beyond the first.
+
+    Set by the admin per listing, not a site-wide formula: full price for the
+    first plant, ``buy_now_price - additional_item_discount`` for each after.
+    """
+
+    def setUp(self):
+        cache.clear()
+        self.category = AuctionCategory.objects.create(name='Daylilies')
+        self.seller = make_seller('discountseller', first_name='Discount')
+        self.buyer = User.objects.create_user('dbuyer', 'dbuyer@example.com', 'pw')
+        Subscription.objects.create(
+            user=self.buyer, plan='monthly', status='active'
+        )
+        self.buyer.profile.country = 'US'
+        self.buyer.profile.save(update_fields=['country'])
+        mail.outbox = []
+
+    def _listing(self, price='10.00', discount='3.00', quantity=5, **kwargs):
+        now = timezone.now()
+        defaults = dict(
+            title='Discounted Daylily',
+            category=self.category,
+            seller=self.seller,
+            start_price=price,
+            listing_type='buy_now',
+            buy_now_price=price,
+            additional_item_discount=discount,
+            quantity_available=quantity,
+            shipping_mode='flat',
+            shipping_fee='5.00',
+            starts_at=now - timedelta(days=1),
+            ends_at=now + timedelta(days=7),
+            is_active=True,
+        )
+        defaults.update(kwargs)
+        listing = AuctionListing.objects.create(**defaults)
+        listing.refresh_from_db()
+        return listing
+
+    # ── The arithmetic ───────────────────────────────────────────────────────
+
+    def test_three_of_a_ten_dollar_plant_with_three_off_costs_twenty_four(self):
+        """The worked example from the spec: $10 + $7 + $7."""
+        listing = self._listing(price='10.00', discount='3.00')
+
+        self.assertEqual(listing.price_for(3), Decimal('24.00'))
+
+    def test_one_unit_pays_full_price(self):
+        listing = self._listing(price='10.00', discount='3.00')
+
+        self.assertEqual(listing.price_for(1), Decimal('10.00'))
+
+    def test_two_units_discount_only_the_second(self):
+        listing = self._listing(price='10.00', discount='3.00')
+
+        self.assertEqual(listing.price_for(2), Decimal('17.00'))
+
+    def test_no_discount_is_plain_multiplication(self):
+        listing = self._listing(price='10.00', discount='0')
+
+        self.assertEqual(listing.price_for(4), Decimal('40.00'))
+        self.assertFalse(listing.has_quantity_discount)
+
+    def test_the_additional_unit_price_is_exposed_for_display(self):
+        listing = self._listing(price='12.00', discount='3.00')
+
+        self.assertEqual(listing.additional_unit_price, Decimal('9.00'))
+        self.assertTrue(listing.has_quantity_discount)
+
+    def test_a_discount_equal_to_the_price_makes_extras_free(self):
+        listing = self._listing(price='10.00', discount='10.00')
+
+        self.assertEqual(listing.price_for(3), Decimal('10.00'))
+
+    def test_extra_units_never_price_below_zero(self):
+        """
+        clean() refuses an over-large discount, but a bulk update bypasses it.
+
+        Flooring here means a listing written that way undercharges rather than
+        paying the buyer to take plants away.
+        """
+        listing = self._listing(price='10.00', discount='0')
+        AuctionListing.objects.filter(pk=listing.pk).update(
+            additional_item_discount='25.00'
+        )
+        listing.refresh_from_db()
+
+        self.assertEqual(listing.additional_unit_price, Decimal('0.00'))
+        self.assertEqual(listing.price_for(3), Decimal('10.00'))
+
+    def test_price_for_zero_or_negative_quantity_is_zero(self):
+        listing = self._listing()
+
+        self.assertEqual(listing.price_for(0), Decimal('0.00'))
+
+    # ── Model validation ─────────────────────────────────────────────────────
+
+    def test_a_discount_larger_than_the_price_is_rejected(self):
+        listing = self._listing(price='10.00', discount='0')
+        listing.additional_item_discount = Decimal('12.00')
+
+        with self.assertRaises(ValidationError) as caught:
+            listing.full_clean()
+
+        self.assertIn('additional_item_discount', caught.exception.error_dict)
+
+    def test_a_negative_discount_is_rejected(self):
+        listing = self._listing(price='10.00', discount='0')
+        listing.additional_item_discount = Decimal('-1.00')
+
+        with self.assertRaises(ValidationError) as caught:
+            listing.full_clean()
+
+        self.assertIn('additional_item_discount', caught.exception.error_dict)
+
+    def test_a_discount_equal_to_the_price_is_allowed(self):
+        """Free extras is a real offer; it is only *below* zero that is not."""
+        listing = self._listing(price='10.00', discount='10.00')
+
+        listing.full_clean()
+
+    def test_an_auction_listing_ignores_the_discount_entirely(self):
+        now = timezone.now()
+        listing = AuctionListing.objects.create(
+            title='Auction With Junk Discount',
+            category=self.category, seller=self.seller,
+            start_price='10.00', listing_type='auction',
+            additional_item_discount='99.00',
+            starts_at=now - timedelta(days=1), ends_at=now + timedelta(days=3),
+        )
+
+        listing.full_clean()
+        self.assertFalse(listing.has_quantity_discount)
+
+    # ── At purchase ──────────────────────────────────────────────────────────
+
+    def test_buying_three_records_the_discounted_amount(self):
+        listing = self._listing(price='10.00', discount='3.00')
+        self.client.force_login(self.buyer)
+
+        self.client.post(
+            reverse('buy_now', kwargs={'pk': listing.pk}), {'quantity': 3}
+        )
+
+        invoice = Invoice.objects.get(listing=listing)
+        self.assertEqual(invoice.quantity, 3)
+        self.assertEqual(invoice.amount, Decimal('24.00'))
+        # Shipping is flat, so the total is the item total plus one fee.
+        self.assertEqual(invoice.total, Decimal('29.00'))
+
+    def test_the_discount_reaches_a_combined_invoice_already_applied(self):
+        """
+        It is applied at purchase, so invoicing needs no knowledge of it.
+
+        The line item's amount is what the buyer agreed to; the combined
+        invoice just adds the lines up.
+        """
+        from auctions.services import generate_combined_invoices
+
+        listing = self._listing(price='10.00', discount='3.00')
+        self.client.force_login(self.buyer)
+        self.client.post(
+            reverse('buy_now', kwargs={'pk': listing.pk}), {'quantity': 3}
+        )
+
+        draft = generate_combined_invoices()[0]
+
+        self.assertEqual(draft.subtotal, Decimal('24.00'))
+
+    def test_the_seller_notice_spells_out_both_tiers(self):
+        listing = self._listing(price='10.00', discount='3.00')
+        self.client.force_login(self.buyer)
+
+        self.client.post(
+            reverse('buy_now', kwargs={'pk': listing.pk}), {'quantity': 3}
+        )
+
+        seller_mail = [m for m in mail.outbox if self.seller.email in m.to]
+        self.assertEqual(len(seller_mail), 1)
+        self.assertIn('$10.00 for the first', seller_mail[0].body)
+        self.assertIn('$7.00 each after', seller_mail[0].body)
+
+    def test_an_undiscounted_sale_says_each(self):
+        listing = self._listing(price='10.00', discount='0')
+        self.client.force_login(self.buyer)
+
+        self.client.post(
+            reverse('buy_now', kwargs={'pk': listing.pk}), {'quantity': 2}
+        )
+
+        seller_mail = [m for m in mail.outbox if self.seller.email in m.to]
+        self.assertIn('$10.00 each', seller_mail[0].body)
+
+    # ── On the listing page ──────────────────────────────────────────────────
+
+    def test_the_listing_page_names_both_prices(self):
+        listing = self._listing(price='12.00', discount='3.00')
+        self.client.force_login(self.buyer)
+
+        response = self.client.get(
+            reverse('listing_detail', kwargs={'pk': listing.pk})
+        )
+
+        self.assertContains(response, '$12.00')
+        self.assertContains(response, '$9.00 each after that')
+        self.assertContains(response, 'save $3.00 per extra plant')
+
+    def test_an_undiscounted_listing_page_says_each_and_nothing_more(self):
+        listing = self._listing(price='12.00', discount='0')
+        self.client.force_login(self.buyer)
+
+        response = self.client.get(
+            reverse('listing_detail', kwargs={'pk': listing.pk})
+        )
+
+        self.assertNotContains(response, 'each after that')
+        self.assertNotContains(response, 'per extra plant')
+
+    def test_the_page_publishes_both_prices_for_the_running_total(self):
+        """The JS total must not recompute the discount from scratch."""
+        listing = self._listing(price='12.00', discount='3.00')
+        self.client.force_login(self.buyer)
+
+        response = self.client.get(
+            reverse('listing_detail', kwargs={'pk': listing.pk})
+        )
+
+        self.assertContains(response, 'buy-now-unit-price')
+        self.assertContains(response, 'buy-now-additional-price')
+        self.assertContains(response, 'buy-now-shipping-rate')
+
+    # ── Through the Add Listing form ─────────────────────────────────────────
+
+    def test_the_add_listing_form_saves_a_discount(self):
+        staff = User.objects.create_user(
+            'discountboss', 'discountboss@example.com', 'pw', is_staff=True
+        )
+        self.client.force_login(staff)
+        now = timezone.now()
+
+        self.client.post(
+            reverse('weekly_setup_listings', kwargs={'seller_pk': self.seller.pk}),
+            {
+                'title': 'Form Discounted',
+                'category': self.category.pk,
+                'listing_type': 'buy_now',
+                'buy_now_price': '20.00',
+                'quantity_available': '4',
+                'additional_item_discount': '5.00',
+                'shipping_mode': 'flat',
+                'shipping_fee': '6.00',
+                'starts_at': (now + timedelta(days=1)).strftime('%Y-%m-%dT%H:%M'),
+                'ends_at': (now + timedelta(days=8)).strftime('%Y-%m-%dT%H:%M'),
+            },
+        )
+
+        listing = AuctionListing.objects.get(title='Form Discounted')
+        self.assertEqual(listing.additional_item_discount, Decimal('5.00'))
+        self.assertEqual(listing.price_for(2), Decimal('35.00'))
+
+    def test_the_form_treats_a_blank_discount_as_none(self):
+        staff = User.objects.create_user(
+            'blankboss', 'blankboss@example.com', 'pw', is_staff=True
+        )
+        self.client.force_login(staff)
+        now = timezone.now()
+
+        self.client.post(
+            reverse('weekly_setup_listings', kwargs={'seller_pk': self.seller.pk}),
+            {
+                'title': 'No Discount Given',
+                'category': self.category.pk,
+                'listing_type': 'buy_now',
+                'buy_now_price': '20.00',
+                'quantity_available': '4',
+                'additional_item_discount': '',
+                'shipping_mode': 'flat',
+                'starts_at': (now + timedelta(days=1)).strftime('%Y-%m-%dT%H:%M'),
+                'ends_at': (now + timedelta(days=8)).strftime('%Y-%m-%dT%H:%M'),
+            },
+        )
+
+        listing = AuctionListing.objects.get(title='No Discount Given')
+        self.assertEqual(listing.additional_item_discount, Decimal('0'))
+
+    def test_the_form_refuses_a_discount_above_the_price(self):
+        staff = User.objects.create_user(
+            'badboss', 'badboss@example.com', 'pw', is_staff=True
+        )
+        self.client.force_login(staff)
+        now = timezone.now()
+
+        response = self.client.post(
+            reverse('weekly_setup_listings', kwargs={'seller_pk': self.seller.pk}),
+            {
+                'title': 'Too Much Off',
+                'category': self.category.pk,
+                'listing_type': 'buy_now',
+                'buy_now_price': '10.00',
+                'quantity_available': '4',
+                'additional_item_discount': '15.00',
+                'shipping_mode': 'flat',
+                'starts_at': (now + timedelta(days=1)).strftime('%Y-%m-%dT%H:%M'),
+                'ends_at': (now + timedelta(days=8)).strftime('%Y-%m-%dT%H:%M'),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'cannot be more than the price')
+        self.assertFalse(AuctionListing.objects.filter(title='Too Much Off').exists())
+
+    def test_switching_to_auction_clears_a_typed_discount(self):
+        """The hidden Buy It Now inputs still post their values."""
+        staff = User.objects.create_user(
+            'switchboss', 'switchboss@example.com', 'pw', is_staff=True
+        )
+        self.client.force_login(staff)
+        now = timezone.now()
+
+        self.client.post(
+            reverse('weekly_setup_listings', kwargs={'seller_pk': self.seller.pk}),
+            {
+                'title': 'Actually An Auction',
+                'category': self.category.pk,
+                'listing_type': 'auction',
+                'start_price': '10.00',
+                'additional_item_discount': '4.00',
+                'starts_at': (now + timedelta(days=1)).strftime('%Y-%m-%dT%H:%M'),
+                'ends_at': (now + timedelta(days=8)).strftime('%Y-%m-%dT%H:%M'),
+            },
+        )
+
+        listing = AuctionListing.objects.get(title='Actually An Auction')
+        self.assertEqual(listing.additional_item_discount, Decimal('0'))
+
+    # ── Copying ──────────────────────────────────────────────────────────────
+
+    def test_a_copied_listing_keeps_the_discount(self):
+        from auctions.services import copy_listing
+
+        source = self._listing(price='10.00', discount='3.00')
+
+        copy = copy_listing(source)
+
+        self.assertEqual(copy.additional_item_discount, Decimal('3.00'))

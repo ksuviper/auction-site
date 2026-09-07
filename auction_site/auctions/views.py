@@ -560,7 +560,9 @@ class BuyNowView(LoginRequiredMixin, View):
                 buyer=request.user,
                 seller=listing.seller,
                 quantity=quantity,
-                amount=listing.buy_now_price * quantity,
+                # price_for() applies the per-listing discount on units
+                # beyond the first; it is the unit price when there is none.
+                amount=listing.price_for(quantity),
                 shipping_fee=listing.shipping_for(quantity),
                 payment_method='',
                 is_manually_created=False,
@@ -594,6 +596,15 @@ class BuyNowView(LoginRequiredMixin, View):
         shipping_note = (
             'per item' if listing.shipping_mode == 'per_item' else 'flat rate'
         )
+        # Spelled out when a discount applies, so a seller reading the notice
+        # can see why the total is not simply price x quantity.
+        if listing.has_quantity_discount:
+            price_lines = (
+                f'${listing.buy_now_price} for the first, '
+                f'${listing.additional_unit_price} each after'
+            )
+        else:
+            price_lines = f'${listing.buy_now_price} each'
 
         # Seller — sale notification (falls back to admin if no seller email).
         seller_recipient = seller.email or admin_email
@@ -602,7 +613,7 @@ class BuyNowView(LoginRequiredMixin, View):
 Your item "{listing.title}" was purchased by {buyer.username}.
 
 Quantity:      {invoice.quantity} of {listing.quantity_available}
-Price each:    ${listing.buy_now_price}
+Price:         {price_lines}
 Item total:    ${invoice.amount}
 Shipping fee:  ${invoice.shipping_fee} ({shipping_note})
 Still in stock: {listing.units_remaining}
@@ -629,7 +640,7 @@ plants ready to ship.
 Listing ID:  {listing.pk}
 Title:       {listing.title}
 Buyer:       {buyer.username} ({buyer.email or 'no email'})
-Quantity:    {invoice.quantity} @ ${listing.buy_now_price} each
+Quantity:    {invoice.quantity} — {price_lines}
 Amount:      ${invoice.amount}
 Shipping:    ${invoice.shipping_fee} ({shipping_note})
 Remaining:   {listing.units_remaining} of {listing.quantity_available}

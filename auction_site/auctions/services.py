@@ -31,6 +31,7 @@ COPIED_LISTING_FIELDS = (
     'reserve_price',
     'buy_now_price',
     'quantity_available',
+    'additional_item_discount',
     'shipping_mode',
     'shipping_fee',
 )

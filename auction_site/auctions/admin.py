@@ -324,6 +324,7 @@ class AuctionListingAdmin(ModelAdmin):
         'start_price',
         'current_bid',
         'buy_now_price',
+        'discount_display',
         'stock_display',
         'shipping_display',
         'reserve_price',
@@ -399,6 +400,13 @@ class AuctionListingAdmin(ModelAdmin):
         if profile is None:
             return obj.seller.get_username()
         return profile.display_name
+
+    @admin.display(description='Multi-buy', ordering='additional_item_discount')
+    def discount_display(self, obj):
+        """The discount and what an extra plant actually costs."""
+        if not obj.has_quantity_discount:
+            return '—'
+        return f'-${obj.additional_item_discount} (${obj.additional_unit_price} ea)'
 
     @admin.display(description='Shipping', ordering='shipping_fee')
     def shipping_display(self, obj):

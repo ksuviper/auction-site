@@ -24,7 +24,8 @@ A "seller" is a user account with the seller flag ticked — see
   everything they owe — nothing is emailed to a buyer automatically
 - Paid memberships via PayPal subscriptions, gating bidding and purchasing (US residents only)
 - Buy It Now listings alongside standard auctions, with per-listing stock so
-  several buyers can each take part of it, and a seller-chosen shipping mode
+  several buyers can each take part of it, a per-listing shipping mode, and an
+  optional multi-buy discount on units beyond the first
 - Proxy (automatic) bidding up to a bidder's maximum
 - Listing questions & comments with admin moderation and threaded replies
 - Email notifications to sellers and admins on auction close
@@ -457,6 +458,7 @@ sell one lot to one `winner`.
 | `quantity_remaining` | Units still for sale. Mirrors `quantity_available` at creation, then counts down. |
 | `shipping_mode` | `flat` — buyer pays shipping once no matter how many they buy. `per_item` — shipping is multiplied by the quantity. Chosen by the seller **per listing**. |
 | `shipping_fee` | What shipping costs for this listing. Blank falls back to the seller's standard fee, so plants that ship differently can be priced individually. `listing.shipping_rate` resolves the two. |
+| `additional_item_discount` | Taken off every unit **beyond the first**. Set per listing by the admin; `0` means no discount. |
 | `Invoice.quantity` | Units on that invoice. One invoice per purchase, so one listing can have several. `Invoice.amount` is the line total (unit price × quantity), not the unit price. |
 
 An admin sets the quantity, shipping cost and shipping mode on the **Add
@@ -465,6 +467,43 @@ It Now. The shipping cost box starts at the seller's standard fee, so it always
 shows what the buyer would pay and an override is a deliberate edit. Duplicating a listing in
 the admin resets its stock to full rather than inheriting how far the original
 sold down.
+
+### Multi-buy discount
+
+A listing can knock a fixed amount off each plant **after the first**, so
+taking three is cheaper per plant than taking one. It is a per-listing number
+an admin types, not a site-wide formula.
+
+`listing.price_for(quantity)` is the single definition:
+
+```
+price_for(n) = buy_now_price + (n - 1) × max(buy_now_price - additional_item_discount, 0)
+```
+
+A $10 plant with a $3 discount costs **$10 + $7 + $7 = $24** for three. The
+purchase view, the listing page and the seller notification all read
+`price_for()` / `additional_unit_price`, so they cannot disagree about what a
+buyer owes.
+
+Two guards worth knowing:
+
+- `clean()` **refuses a discount above the price** (and a negative one), so the
+  number an admin types is the number charged. Without it the arithmetic would
+  silently floor at zero and quietly do something other than what was entered.
+- `additional_unit_price` **floors at zero anyway**. `clean()` does not run for
+  `objects.update()` or bulk writes, and a listing written that way must
+  undercharge rather than pay the buyer to take plants away.
+
+A discount *equal* to the price is allowed — free extras is a real offer.
+
+The listing page shows both tiers ("$12.00 first, $9.00 each after that") and a
+running total that updates as the buyer changes the quantity, so they see what
+three costs before committing rather than after. That total restates the same
+arithmetic in JavaScript; the server is what actually charges, and the tests pin
+the two to the same answers.
+
+The discount is applied **at purchase**, so `Invoice.amount` already includes
+it and combined invoicing needs no knowledge of it.
 
 ### Behaviour worth knowing
 

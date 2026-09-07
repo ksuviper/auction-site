@@ -18,7 +18,6 @@ from auctions.models import (
     Bid,
     Invoice,
     ListingComment,
-    ProxyBid,
     Subscription,
 )
 from auctions.tests.utils import make_seller

@@ -59,8 +59,19 @@
         <div class="mb-3">
           <div class="text-muted fs-5 mb-1">Price</div>
           <div class="fw-bold text-success" style="font-size:2.25rem;">
-            ${{ listing.buy_now_price }} <span class="fs-5 text-muted">each</span>
+            ${{ listing.buy_now_price }}
+            <span class="fs-5 text-muted">
+              {% if listing.has_quantity_discount %}first{% else %}each{% endif %}
+            </span>
           </div>
+          {% if listing.has_quantity_discount %}
+          <div class="fw-semibold text-success fs-5 mb-1">
+            ${{ listing.additional_unit_price }} each after that
+            <span class="badge bg-success-subtle text-success-emphasis ms-1">
+              save ${{ listing.additional_item_discount }} per extra plant
+            </span>
+          </div>
+          {% endif %}
           <div class="text-muted">
             Buy It Now —
             {% if listing.is_sold_out %}
@@ -170,6 +181,12 @@
           How many? <span class="text-muted fw-normal">({{ listing.units_remaining }} available)</span>
         </label>
         {{ buy_now_form.quantity }}
+        {% if listing.has_quantity_discount %}
+        <div class="form-text fs-6">
+          First one ${{ listing.buy_now_price }}, each additional
+          <strong>${{ listing.additional_unit_price }}</strong>.
+        </div>
+        {% endif %}
         <div class="form-text fs-6">
           Shipping is
           {% if listing.shipping_mode == 'per_item' %}
@@ -181,28 +198,66 @@
           {% endif %}
         </div>
       </div>
+      {% comment %}
+        A running total, so a buyer choosing 3 sees what 3 costs before they
+        commit rather than after. It restates the same arithmetic as
+        AuctionListing.price_for() — the server is what actually charges, and
+        the tests pin the two to the same answers.
+      {% endcomment %}
+      <p class="fs-5 mb-3" id="buy-now-running-total" aria-live="polite"></p>
       <button type="submit" class="btn btn-success btn-lg w-100 fw-semibold">
-        <i class="fas fa-bag-shopping me-2"></i>Buy It Now — ${{ listing.buy_now_price }} each
+        <i class="fas fa-bag-shopping me-2"></i>Buy It Now
       </button>
     </form>
     {{ listing.buy_now_price|json_script:"buy-now-unit-price" }}
+    {{ listing.additional_unit_price|json_script:"buy-now-additional-price" }}
+    {{ listing.shipping_rate|json_script:"buy-now-shipping-rate" }}
     <script>
-      // Built at submit time so the confirmation names the quantity and total
-      // the buyer actually chose, instead of a fixed single-unit price.
       (function () {
         var form = document.getElementById('buy-now-form');
-        var priceEl = document.getElementById('buy-now-unit-price');
-        if (!form || !priceEl) { return; }
-        var unitPrice = Number(JSON.parse(priceEl.textContent));
+        var firstEl = document.getElementById('buy-now-unit-price');
+        var extraEl = document.getElementById('buy-now-additional-price');
+        var shipEl = document.getElementById('buy-now-shipping-rate');
+        var totalEl = document.getElementById('buy-now-running-total');
+        if (!form || !firstEl || !extraEl || !shipEl) { return; }
+
+        var firstPrice = Number(JSON.parse(firstEl.textContent));
+        var extraPrice = Number(JSON.parse(extraEl.textContent));
+        var shipRate = Number(JSON.parse(shipEl.textContent));
+        var perItemShipping = {% if listing.shipping_mode == 'per_item' %}true{% else %}false{% endif %};
         var input = form.querySelector('#{{ buy_now_form.quantity.id_for_label }}');
 
+        function itemTotal(qty) {
+          // Mirrors AuctionListing.price_for(): full price for the first,
+          // discounted for the rest.
+          return firstPrice + (qty - 1) * extraPrice;
+        }
+        function shipping(qty) {
+          return perItemShipping ? shipRate * qty : shipRate;
+        }
+
+        function render() {
+          var qty = parseInt(input.value, 10);
+          if (!totalEl) { return; }
+          if (!qty || qty < 1) { totalEl.textContent = ''; return; }
+          totalEl.textContent =
+            qty + ' plant' + (qty === 1 ? '' : 's') + ': $' +
+            itemTotal(qty).toFixed(2) + ' + $' + shipping(qty).toFixed(2) +
+            ' shipping = $' + (itemTotal(qty) + shipping(qty)).toFixed(2);
+        }
+
+        input.addEventListener('input', render);
+        input.addEventListener('change', render);
+        render();
+
+        // Confirmed at submit time so the message names what was chosen.
         form.addEventListener('submit', function (event) {
           var qty = parseInt(input.value, 10);
           if (!qty || qty < 1) { return; }
-          var message = 'Buying ' + qty + ' × $' + unitPrice.toFixed(2) +
-                        ' = $' + (unitPrice * qty).toFixed(2) +
-                        ' plus shipping. This is a commitment to purchase and ' +
-                        'cannot be undone.';
+          var message = 'Buying ' + qty + ' for $' + itemTotal(qty).toFixed(2) +
+                        ' plus $' + shipping(qty).toFixed(2) + ' shipping — $' +
+                        (itemTotal(qty) + shipping(qty)).toFixed(2) + ' total. ' +
+                        'This is a commitment to purchase and cannot be undone.';
           if (!window.confirm(message)) {
             event.preventDefault();
           }

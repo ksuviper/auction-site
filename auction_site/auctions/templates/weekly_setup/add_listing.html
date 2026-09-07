@@ -173,6 +173,20 @@
               {% endif %}
             </div>
             <div class="col-md-6">
+              <label for="{{ form.additional_item_discount.id_for_label }}" class="form-label fw-semibold fs-5">
+                {{ form.additional_item_discount.label }}
+              </label>
+              <div class="input-group input-group-lg">
+                <span class="input-group-text">$</span>
+                {{ form.additional_item_discount }}
+                <span class="input-group-text">off each extra</span>
+              </div>
+              <div class="form-text fs-6">{{ form.additional_item_discount.help_text }}</div>
+              {% if form.additional_item_discount.errors %}
+              <div class="text-danger fw-semibold">{{ form.additional_item_discount.errors|join:", " }}</div>
+              {% endif %}
+            </div>
+            <div class="col-md-6">
               <label for="{{ form.shipping_fee.id_for_label }}" class="form-label fw-semibold fs-5">
                 Shipping cost
               </label>
