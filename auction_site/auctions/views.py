@@ -38,7 +38,7 @@ from .models import (
 )
 from .queries import sellers_in_category
 from .services import run_proxy_bids
-from .utils import _safe_send, has_active_subscription, payment_block
+from .utils import _safe_send, has_active_subscription
 
 User = get_user_model()
 
@@ -568,50 +568,32 @@ class BuyNowView(LoginRequiredMixin, View):
 
         # Emails are sent after the transaction commits.
         self._send_purchase_emails(listing, request.user, invoice)
+        # No promise of payment details: an admin combines everything this
+        # buyer owes this seller into one invoice and sends that, and it is the
+        # only bill they get. Saying "pay now" here would ask twice.
         messages.success(
             request,
-            'Purchase complete! Your invoice and payment details are below.',
+            f'Purchase complete — {quantity} × {listing.title}. We\'ll email '
+            'you an invoice covering everything you have bought from this '
+            'seller.',
         )
         return redirect('invoice_detail', pk=invoice.pk)
 
     def _send_purchase_emails(self, listing, buyer, invoice):
+        """
+        Tell the seller and the admin. Deliberately *not* the buyer.
+
+        The buyer used to get a "thank you, here is how to pay" email here.
+        They no longer hear anything at purchase: an admin combines everything
+        they owe this seller into one invoice and sends that, and it is the only
+        bill. A per-purchase email would ask for payment once per plant, which
+        is the thing combined invoicing exists to stop.
+        """
         seller = listing.seller
-        seller_profile = getattr(seller, 'profile', None)
-        seller_name = (
-            seller_profile.display_name if seller_profile
-            else seller.get_username()
-        )
-        payment_methods = payment_block(seller_profile)
         admin_email = getattr(settings, 'ADMIN_EMAIL', '')
         shipping_note = (
             'per item' if listing.shipping_mode == 'per_item' else 'flat rate'
         )
-
-        # Buyer — purchase confirmation with payment instructions.
-        if buyer.email:
-            body = f"""\
-Thank you for your purchase, {buyer.username}!
-
-Item:            {listing.title}
-Quantity:        {invoice.quantity}
-Price each:      ${listing.buy_now_price}
-Item total:      ${invoice.amount}
-Shipping fee:    ${invoice.shipping_fee} ({shipping_note})
-Total:           ${invoice.total}
-
-Seller:          {seller_name}
-Accepted payment: {payment_methods}
-
-Please arrange payment with the seller using one of their accepted methods.
-You can view your invoice (#{invoice.pk}) any time from your account.
-
--- ASQ Daylily Auction Group
-"""
-            _safe_send(
-                subject=f'Your ASQ Daylily purchase: {listing.title}',
-                body=body,
-                recipients=[buyer.email],
-            )
 
         # Seller — sale notification (falls back to admin if no seller email).
         seller_recipient = seller.email or admin_email
@@ -627,7 +609,9 @@ Still in stock: {listing.units_remaining}
 Buyer email:   {buyer.email or '(not provided)'}
 Invoice:       #{invoice.pk}
 
-Please contact the buyer to arrange payment and shipping.
+An invoice covering everything this buyer owes you will be sent to them by
+an administrator — please do not chase them for payment yourself. Get their
+plants ready to ship.
 
 -- ASQ Daylily Auction System
 """

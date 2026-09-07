@@ -446,6 +446,122 @@ class ProxyBid(models.Model):
         return f'{self.bidder.username} – max ${self.max_amount} on "{self.listing}"'
 
 
+class CombinedInvoice(models.Model):
+    """
+    One bill covering everything a buyer owes one seller.
+
+    A buyer who wins three plants from the same grower over a fortnight gets
+    one invoice for all three, not three invoices — and pays shipping once.
+    The individual Invoice rows become its line items.
+
+    Nothing here is automatic except the grouping. An admin decides when to
+    generate drafts, reviews each one (adjusting shipping or adding a
+    discount), and clicks Send. Until that click the buyer has heard nothing
+    at all: **this email is the notification** that they won or bought
+    something, which is why nothing else emails them any more.
+    """
+
+    STATUS_CHOICES = [
+        ('draft', 'Draft'),
+        ('sent', 'Sent'),
+    ]
+
+    buyer = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        related_name='combined_invoices',
+    )
+    seller = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        limit_choices_to={'profile__is_seller': True},
+        related_name='combined_invoices_as_seller',
+    )
+    status = models.CharField(
+        max_length=5, choices=STATUS_CHOICES, default='draft'
+    )
+    shipping_override = models.DecimalField(
+        max_digits=8, decimal_places=2, null=True, blank=True,
+        help_text=(
+            'If set, replaces the sum of the line items\' shipping fees. Use '
+            'it when several plants ship in one box for less than the '
+            'individual fees add up to.'
+        ),
+    )
+    discount_amount = models.DecimalField(
+        max_digits=8, decimal_places=2, default=0,
+        help_text='Flat dollar discount applied to this invoice total.',
+    )
+    notes = models.TextField(
+        blank=True,
+        help_text='Shown to the buyer on the invoice email.',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        constraints = [
+            # The "open running tab": a buyer+seller pair has at most one
+            # unsent invoice, so a second Generate run adds to the existing
+            # draft rather than starting a rival one. Enforced here as well as
+            # in the generation code, because two admins clicking Generate at
+            # the same moment is exactly the case the code alone would miss.
+            models.UniqueConstraint(
+                fields=['buyer', 'seller'],
+                condition=models.Q(status='draft'),
+                name='one_open_draft_per_buyer_and_seller',
+            ),
+        ]
+
+    # Money always reads as money. SUM() hands back a Decimal whose exponent
+    # depends on the backend — SQLite returns Decimal('50') for 20.00 + 30.00 —
+    # so an unquantized total renders as "$50" in an email and on the review
+    # page. Every amount below goes through _money().
+    _CENTS = Decimal('0.01')
+
+    @staticmethod
+    def _money(value):
+        return (value or Decimal('0')).quantize(CombinedInvoice._CENTS)
+
+    @property
+    def subtotal(self):
+        """Sum of the line items' amounts, before shipping and discount."""
+        return self._money(
+            self.line_items.aggregate(total=models.Sum('amount'))['total']
+        )
+
+    @property
+    def summed_shipping(self):
+        """What the line items' own shipping fees add up to."""
+        return self._money(
+            self.line_items.aggregate(total=models.Sum('shipping_fee'))['total']
+        )
+
+    @property
+    def total_shipping(self):
+        """The shipping actually charged — the override when one is set."""
+        if self.shipping_override is not None:
+            return self._money(self.shipping_override)
+        return self.summed_shipping
+
+    @property
+    def total(self):
+        return self._money(
+            self.subtotal + self.total_shipping - self.discount_amount
+        )
+
+    @property
+    def is_sent(self) -> bool:
+        return self.status == 'sent'
+
+    def __str__(self) -> str:
+        return (
+            f'Combined invoice #{self.pk} – '
+            f'{self.buyer.username} / {self.seller.username} ({self.status})'
+        )
+
+
 class Invoice(models.Model):
     listing = models.ForeignKey(
         AuctionListing,
@@ -486,6 +602,20 @@ class Invoice(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     is_sent = models.BooleanField(default=False)
     is_manually_created = models.BooleanField(default=False)
+    # None means "not yet billed" — this is what drives the open running tab.
+    # SET_NULL so deleting a draft returns its items to the unbilled pool
+    # rather than destroying the record of a sale.
+    combined_invoice = models.ForeignKey(
+        CombinedInvoice,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='line_items',
+        help_text=(
+            'The combined invoice this line belongs to. Empty means it has '
+            'not been billed to the buyer yet.'
+        ),
+    )
 
     class Meta:
         ordering = ['-created_at']

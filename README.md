@@ -2,7 +2,7 @@
 
 A Django-based online auction platform for the Above Status Quo Daylily Auction Group.
 Sellers are featured on a rotating weekly schedule; bidders browse by category, place bids,
-and receive automated invoices when auctions close.
+and are invoiced by an admin for everything they owe each grower.
 
 A "seller" is a user account with the seller flag ticked — see
 [Sellers Are User Accounts](#sellers-are-user-accounts).
@@ -19,14 +19,16 @@ A "seller" is a user account with the seller flag ticked — see
 - Copy an earlier listing to relist a plant, from Add Listing or the admin
 - Listings that have actually sold are frozen in the admin; ones that expired
   unsold stay editable and can be re-dated
-- Automatic auction closing, winner assignment, and invoice generation (APScheduler)
+- Automatic auction closing and winner assignment (APScheduler)
+- Combined invoicing: one admin-sent invoice per buyer per seller, covering
+  everything they owe — nothing is emailed to a buyer automatically
 - Paid memberships via PayPal subscriptions, gating bidding and purchasing (US residents only)
 - Buy It Now listings alongside standard auctions, with per-listing stock so
   several buyers can each take part of it, and a seller-chosen shipping mode
 - Proxy (automatic) bidding up to a bidder's maximum
 - Listing questions & comments with admin moderation and threaded replies
-- Email notifications to winners and sellers on auction close
-- Invoice management dashboard with CSV export
+- Email notifications to sellers and admins on auction close
+- Invoice dashboards with CSV export
 - Admin reporting with Chart.js monthly revenue chart
 - Social login (Google, Facebook) via django-allauth
 - Two-factor authentication: emailed login code by default for everyone
@@ -239,6 +241,70 @@ re-pointable — a non-null `seller` cannot be introduced while rows exist with 
 
 **Take a database backup before applying it.** Afterwards, flag the seller
 accounts as above and re-enter the current week's listings.
+
+---
+
+## Invoicing
+
+> **This changed. Nothing is emailed to a buyer automatically any more.** An
+> admin generates and sends invoices; until they do, a buyer who has won plants
+> has heard nothing at all.
+
+A buyer who wins three plants from one grower over a fortnight gets **one
+invoice for all three**, and pays shipping once. The workflow is three
+deliberate steps at **Invoices** in the nav (`/admin/combined-invoices/`):
+
+1. **Generate** gathers every unbilled sale into draft invoices, one per
+   buyer+seller pair. Nothing leaves the site.
+2. **Review** a draft: see its line items and totals, override the shipping,
+   apply a discount, add a note for the buyer.
+3. **Send** emails the buyer. Save-and-send are one submit, so what is on
+   screen is what gets sent.
+
+### What "unbilled" means
+
+`Invoice.combined_invoice IS NULL`. There is **no batch boundary and no time
+window** — everything a buyer owes a seller that has not been sent to them
+goes on one invoice, however long ago it closed.
+
+A pair with an open draft has new items added to *that* draft rather than
+getting a second one. Once a draft is sent the tab closes, and the next win
+starts a fresh one. A `UniqueConstraint` on `(buyer, seller)` where
+`status='draft'` enforces that in the database, not only in the code — two
+admins clicking Generate at the same moment is exactly the case code alone
+would miss.
+
+### What stopped emailing
+
+| Was | Now |
+|---|---|
+| `close_ended_auctions` emailed the winner "you won, here is how to pay" | Removed. The `_email_winner` helper is **deleted**, not just unused — a method that emails a buyer at close is one wiring change from asking twice. |
+| `BuyNowView` emailed the buyer "thank you, here is how to pay" | Removed. |
+| — | Seller and admin notices **stay**. They are internal heads-ups that a plant sold and needs invoicing, not requests for money, and they now say not to chase the buyer. |
+
+Invoice rows are still created at close and at purchase exactly as before —
+that is what invoicing works from. A buyer's own invoice page shows "there is
+nothing to pay yet" until it has been billed, then shows the seller's payment
+details.
+
+### Money
+
+`subtotal`, `summed_shipping`, `total_shipping` and `total` all quantize to two
+decimal places. `SUM()` returns a Decimal whose exponent depends on the
+backend — SQLite gives `Decimal('50')` for `20.00 + 30.00` — which reaches an
+email as "$50" and does not read as a price.
+
+### Things that are deliberately blocked
+
+- **A sent invoice cannot be edited or deleted**, in the admin or on the review
+  page. Editing it would leave the site disagreeing with the email in the
+  buyer's inbox; deleting it would return its line items to the unbilled pool
+  (`Invoice.combined_invoice` is `SET_NULL`) and the next Generate run would
+  bill the buyer a second time.
+- **Deleting a *draft* is fine** and does the useful thing: its items go back
+  to the pool to be regrouped.
+- A discount larger than the bill is refused, so nobody emails a buyer a
+  negative total.
 
 ---
 

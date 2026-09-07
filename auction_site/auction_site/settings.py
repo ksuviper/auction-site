@@ -324,8 +324,24 @@ UNFOLD = {
                 "collapsible": False,
                 "items": [
                     {
-                        "title": "Invoices",
+                        # Where invoicing actually happens: generate drafts,
+                        # review them, send them. Badged with how many drafts
+                        # are waiting, since nothing reaches a buyer until an
+                        # admin comes here and sends one.
+                        "title": "Combined Invoices",
+                        "icon": "layers",
+                        "link": reverse_lazy("combined_invoice_dashboard"),
+                        "badge": "auctions.admin.draft_invoice_count",
+                        "badge_variant": "warning",
+                    },
+                    {
+                        "title": "Invoice Records",
                         "icon": "receipt_long",
+                        "link": reverse_lazy("admin:auctions_combinedinvoice_changelist"),
+                    },
+                    {
+                        "title": "Individual Invoices",
+                        "icon": "description",
                         "link": reverse_lazy("admin:auctions_invoice_changelist"),
                     },
                     {

@@ -43,6 +43,7 @@ urlpatterns = [
     path('privacy/data-deletion/', TemplateView.as_view(template_name='legal/data_deletion.html'), name='data_deletion'),
     path('favicon.ico', RedirectView.as_view(url=settings.STATIC_URL + 'favicon.ico', permanent=True)),
     path('admin/invoices/', include('auctions.invoice_urls')),
+    path('admin/combined-invoices/', include('auctions.combined_invoice_urls')),
     path('admin/weekly-setup/', include('auctions.weekly_setup_urls')),
     path('admin/reports/', include('auctions.reports_urls')),
     path('admin/', admin.site.urls),

@@ -1,7 +1,7 @@
 from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from django.db.models import Exists, OuterRef, Q
+from django.db.models import Count, Exists, OuterRef, Q
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.html import mark_safe
@@ -16,6 +16,7 @@ from .models import (
     AuctionCategory,
     AuctionListing,
     Bid,
+    CombinedInvoice,
     FAQItem,
     Invoice,
     ListingComment,
@@ -465,6 +466,132 @@ class InvoiceAdmin(ModelAdmin):
     )
     raw_id_fields = ('listing', 'buyer', 'seller')
     date_hierarchy = 'created_at'
+
+
+# ── Combined invoices ────────────────────────────────────────────────────────
+
+def draft_invoice_count(request):
+    """
+    Sidebar badge: how many drafts are waiting to be reviewed and sent.
+
+    Worth a badge because nothing reaches a buyer on its own any more — a draft
+    left unsent is a buyer who has heard nothing about plants they won. Always
+    a string, including '0': unfold prints the configured dotted path when a
+    badge callback returns something falsy.
+    """
+    return str(CombinedInvoice.objects.filter(status='draft').count())
+
+
+class InvoiceLineInline(TabularInline):
+    """
+    The line items on a combined invoice, read-only.
+
+    Billing adjustments happen on the review page; a line's amount is what the
+    buyer committed to when they bid or bought, so it is not something to nudge
+    from inside the bill.
+    """
+
+    model = Invoice
+    fk_name = 'combined_invoice'
+    extra = 0
+    can_delete = False
+    fields = ('item_display', 'quantity', 'amount', 'shipping_fee', 'created_at')
+    readonly_fields = fields
+    verbose_name = 'Line item'
+    verbose_name_plural = 'Line items'
+
+    def has_add_permission(self, request, obj):
+        """Lines arrive by being generated, never by being typed in here."""
+        return False
+
+    @admin.display(description='Item')
+    def item_display(self, obj):
+        return obj.item_display
+
+
+@admin.register(CombinedInvoice)
+class CombinedInvoiceAdmin(ModelAdmin):
+    """
+    Record-keeping view. The working UI is at /admin/combined-invoices/.
+
+    Generating, adjusting and sending all happen there — this is for looking
+    things up, and for the status filter the client asked for.
+    """
+
+    list_display = (
+        'pk', 'buyer', 'seller_display', 'status', 'item_count',
+        'subtotal_display', 'shipping_display', 'discount_amount',
+        'total_display', 'created_at', 'sent_at', 'review_link',
+    )
+    list_filter = ('status',)
+    search_fields = (
+        'buyer__username', 'buyer__email', 'seller__username', 'seller__email',
+    )
+    raw_id_fields = ('buyer', 'seller')
+    readonly_fields = ('created_at', 'sent_at')
+    date_hierarchy = 'created_at'
+    inlines = [InvoiceLineInline]
+
+    def get_queryset(self, request):
+        return (
+            super().get_queryset(request)
+            .select_related('buyer', 'seller__profile')
+            .prefetch_related('line_items')
+            .annotate(_item_count=Count('line_items'))
+        )
+
+    def has_change_permission(self, request, obj=None):
+        """
+        A sent invoice is a record of what a buyer was told they owe.
+
+        Editing its shipping or discount afterwards would leave the site
+        disagreeing with the email in their inbox.
+        """
+        if obj is not None and obj.status == 'sent':
+            return False
+        return super().has_change_permission(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        """
+        Deleting a sent invoice would silently un-bill its line items.
+
+        Invoice.combined_invoice is SET_NULL, so the items would return to the
+        unbilled pool and the next Generate run would bill the buyer a second
+        time for plants they have already been asked to pay for. Deleting a
+        *draft* is fine and does exactly the useful thing: the items go back to
+        the pool to be regrouped.
+        """
+        if obj is not None and obj.status == 'sent':
+            return False
+        return super().has_delete_permission(request, obj)
+
+    @admin.display(description='Seller', ordering='seller__username')
+    def seller_display(self, obj):
+        profile = getattr(obj.seller, 'profile', None)
+        return profile.display_name if profile else obj.seller.get_username()
+
+    @admin.display(description='Items', ordering='_item_count')
+    def item_count(self, obj):
+        return obj._item_count
+
+    @admin.display(description='Subtotal')
+    def subtotal_display(self, obj):
+        return f'${obj.subtotal}'
+
+    @admin.display(description='Shipping')
+    def shipping_display(self, obj):
+        suffix = ' (set)' if obj.shipping_override is not None else ''
+        return f'${obj.total_shipping}{suffix}'
+
+    @admin.display(description='Total')
+    def total_display(self, obj):
+        return f'${obj.total}'
+
+    @admin.display(description='Review')
+    def review_link(self, obj):
+        url = reverse('combined_invoice_review', args=[obj.pk])
+        label = 'Review &amp; send' if obj.status == 'draft' else 'View'
+        return mark_safe(f'<a href="{url}">{label}</a>')
 
 
 # ── Admin-managed content pages ──────────────────────────────────────────────

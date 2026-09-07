@@ -4,6 +4,7 @@ import logging
 from decimal import Decimal
 
 from django.db import transaction
+from django.utils import timezone
 
 from .models import AuctionListing, Bid, ProxyBid
 from .utils import _safe_send
@@ -33,6 +34,155 @@ COPIED_LISTING_FIELDS = (
     'shipping_mode',
     'shipping_fee',
 )
+
+
+def generate_combined_invoices():
+    """
+    Gather every unbilled sale into draft invoices, one per buyer+seller pair.
+
+    Returns the drafts that were created or added to, newest first.
+
+    "Unbilled" means ``Invoice.combined_invoice is None`` — there is no batch
+    boundary and no time window. Everything a buyer owes a seller that has not
+    been sent to them yet goes onto one invoice, however long ago it closed or
+    how many separate closing events it came from.
+
+    A pair with an existing *draft* has its new items added to that draft
+    rather than getting a second one; only once a draft has been sent does the
+    next win start a fresh tab. The database enforces that too — see the
+    UniqueConstraint on CombinedInvoice.
+    """
+    from .models import CombinedInvoice, Invoice
+
+    with transaction.atomic():
+        unbilled = list(
+            Invoice.objects
+            .filter(combined_invoice__isnull=True)
+            .values_list('pk', 'buyer_id', 'seller_id')
+        )
+        if not unbilled:
+            return []
+
+        by_pair = {}
+        for invoice_pk, buyer_id, seller_id in unbilled:
+            by_pair.setdefault((buyer_id, seller_id), []).append(invoice_pk)
+
+        drafts = []
+        for (buyer_id, seller_id), invoice_pks in by_pair.items():
+            draft, created = CombinedInvoice.objects.get_or_create(
+                buyer_id=buyer_id, seller_id=seller_id, status='draft'
+            )
+            Invoice.objects.filter(pk__in=invoice_pks).update(
+                combined_invoice=draft
+            )
+            drafts.append(draft)
+            logger.info(
+                'Combined invoice #%d %s for buyer=%s seller=%s (+%d item(s))',
+                draft.pk, 'created' if created else 'updated',
+                buyer_id, seller_id, len(invoice_pks),
+            )
+
+    drafts.sort(key=lambda d: d.pk, reverse=True)
+    return drafts
+
+
+def send_combined_invoice(combined_invoice, request=None):
+    """
+    Email the buyer their itemised invoice and mark it sent.
+
+    This is the only point at which a buyer hears that they won or bought
+    anything, so the email carries the full breakdown and the seller's payment
+    details — nothing earlier told them either.
+
+    Returns True if it was sent. An already-sent invoice returns False rather
+    than emailing twice; the caller decides what to tell the admin.
+
+    The status is committed before the email goes out. If sending fails,
+    _safe_send logs it and the invoice still reads as sent — which is the safer
+    of the two wrong answers, since the alternative is a retry that bills the
+    buyer twice for the same plants.
+    """
+    from .models import Invoice
+    from .utils import _safe_send, payment_block, seller_display_name
+
+    if combined_invoice.status != 'draft':
+        return False
+
+    line_items = list(
+        combined_invoice.line_items.select_related('listing').order_by('pk')
+    )
+
+    with transaction.atomic():
+        combined_invoice.status = 'sent'
+        combined_invoice.sent_at = timezone.now()
+        combined_invoice.save(update_fields=['status', 'sent_at'])
+        # Keep the per-invoice flag in step, so the older invoice dashboard and
+        # the reports do not show these as still outstanding.
+        Invoice.objects.filter(combined_invoice=combined_invoice).update(
+            is_sent=True
+        )
+
+    buyer = combined_invoice.buyer
+    if not buyer.email:
+        logger.warning(
+            'Combined invoice #%d has no buyer email; marked sent without '
+            'emailing.', combined_invoice.pk,
+        )
+        return True
+
+    seller = combined_invoice.seller
+    lines = []
+    for item in line_items:
+        quantity = f' x{item.quantity}' if item.quantity > 1 else ''
+        lines.append(
+            f'  {item.item_display}{quantity}\n'
+            f'      Item: ${item.amount}   Shipping: ${item.shipping_fee}'
+        )
+    items_block = '\n'.join(lines) or '  (no items)'
+
+    shipping_note = ''
+    if combined_invoice.shipping_override is not None:
+        shipping_note = ' (combined shipping)'
+
+    discount_line = ''
+    if combined_invoice.discount_amount:
+        discount_line = f'\nDiscount:       -${combined_invoice.discount_amount}'
+
+    notes_block = ''
+    if combined_invoice.notes.strip():
+        notes_block = f'\nA note from us:\n{combined_invoice.notes.strip()}\n'
+
+    body = f"""\
+Hello {buyer.get_full_name() or buyer.username},
+
+Here is your invoice for plants from {seller_display_name(seller)}.
+
+{items_block}
+
+Subtotal:       ${combined_invoice.subtotal}
+Shipping:       ${combined_invoice.total_shipping}{shipping_note}{discount_line}
+TOTAL DUE:      ${combined_invoice.total}
+{notes_block}
+Please pay {seller_display_name(seller)} directly using one of these:
+
+                 {payment_block(getattr(seller, 'profile', None))}
+
+Thank you for supporting our growers!
+
+-- ASQ Daylily Auction Group
+"""
+    _safe_send(
+        subject=(
+            f'Your ASQ Daylily invoice from {seller_display_name(seller)}'
+        ),
+        body=body,
+        recipients=[buyer.email],
+    )
+    logger.info(
+        'Combined invoice #%d sent to %s (total $%s)',
+        combined_invoice.pk, buyer.email, combined_invoice.total,
+    )
+    return True
 
 
 def copy_listing(source):

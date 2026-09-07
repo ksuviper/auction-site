@@ -18,7 +18,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from auctions.models import AuctionListing, Invoice
-from auctions.utils import _safe_send, payment_block, seller_display_name
+from auctions.utils import _safe_send, seller_display_name
 
 logger = logging.getLogger(__name__)
 
@@ -143,58 +143,31 @@ class Command(BaseCommand):
     # ── Email notifications ───────────────────────────────────────────────────
 
     def _send_notifications(self, listing, top_bid, invoice):
+        """
+        Tell the seller and the admin. Deliberately *not* the winner.
+
+        The winner used to get a "you won, here is how to pay" email from here.
+        They no longer hear anything at auction close: an admin generates a
+        combined invoice covering everything they owe that seller and sends it,
+        and that email is the notification. Emailing them here as well would
+        ask for payment twice, once per plant, which is the thing combined
+        invoicing exists to stop.
+
+        The seller and admin notices stay. They are internal — a heads-up that
+        a plant sold and needs invoicing — not a request for money.
+        """
         if listing.listing_type == 'buy_now':
-            # Buy It Now listings notify at the moment of each purchase, in
-            # BuyNowView. Reaching ends_at is not a sale and not a failed
-            # auction, so the no-bids notice below would be wrong either way:
-            # the listing may well have sold out already.
+            # Buy It Now sales are recorded per purchase in BuyNowView.
+            # Reaching ends_at is not a sale and not a failed auction, so the
+            # no-bids notice below would be wrong either way: the listing may
+            # well have sold out already.
             return
 
         if top_bid:
-            self._email_winner(listing, top_bid, invoice)
             self._email_seller(listing, top_bid)
             self._email_admin(listing, top_bid, invoice)
         else:
             self._email_admin_no_bids(listing)
-
-    def _email_winner(self, listing, top_bid, invoice):
-        buyer = top_bid.bidder
-        if not buyer.email:
-            logger.warning(
-                'Winner %s has no email address — skipping winner notification.', buyer.username
-            )
-            return
-
-        seller = listing.seller
-        payments = payment_block(getattr(seller, 'profile', None))
-        seller_block = (
-            f'\nSeller:              {seller_display_name(seller)}'
-            f'\nAccepted payments:   {payments}'
-            # The listing's own fee when it sets one, else the seller's.
-            f'\nShipping fee:        ${listing.shipping_rate}'
-        )
-
-        body = f"""\
-Congratulations, {buyer.username}!
-
-You won the auction for:
-  {listing.title}
-
-Winning bid:  ${top_bid.amount}
-{seller_block}
-
-The seller will reach out with payment instructions. Please have your
-shipping address ready and confirm your preferred payment method.
-
-Thank you for bidding with ASQ Daylily Auctions!
-
--- ASQ Daylily Auction Group
-"""
-        _safe_send(
-            subject=f'You won: {listing.title}',
-            body=body,
-            recipients=[buyer.email],
-        )
 
     def _email_seller(self, listing, top_bid):
         """
@@ -223,7 +196,9 @@ Winner email:   {buyer.email or '(not provided)'}
 Winning bid:    ${top_bid.amount}
 Ended at:       {listing.ends_at.strftime('%Y-%m-%d %H:%M %Z')}
 
-Please contact the buyer to arrange payment and shipping.
+An invoice covering everything this buyer owes you will be sent to them by
+an administrator — please do not chase them for payment yourself. Get their
+plants ready to ship.
 
 -- ASQ Daylily Auction System
 """

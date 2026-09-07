@@ -131,34 +131,67 @@ Bidders receive no automated notification when a listing opens; promotion
 
 ---
 
-## Step 5 — Auction auto-closes; invoices auto-send
+## Step 5 — Auction auto-closes (the buyer is not told yet)
 
 The background scheduler checks for ended auctions **every 5 minutes**.
 When `ends_at` passes, the system automatically:
 
 1. Marks the listing `is_closed = True`, `is_active = False`.
 2. Assigns the highest bidder as winner.
-3. Creates an Invoice (amount = winning bid, shipping = seller's fee).
-4. Emails the **winner** with their winning amount and seller contact info.
-5. Emails the **seller** (or admin if no seller email) to arrange payment/shipping.
-6. Emails the **admin** a summary of the closed auction.
+3. Records the sale (amount = winning bid, shipping = the listing's fee).
+4. Emails the **seller** (or admin if no seller email) that a plant sold and
+   needs to be got ready.
+5. Emails the **admin** a summary of the closed auction.
 
-If no bids were placed, the listing is closed with no winner and no invoice,
-and the admin receives a "no bids" notification.
+> **The winner hears nothing at this point.** They are told when you send them
+> an invoice in Step 6, and that email is the notification — so a buyer who
+> won plants is waiting on you. Don't leave drafts unsent.
+
+If no bids were placed, the listing is closed with no winner and no sale
+recorded, and the admin receives a "no bids" notification.
+
+Buy It Now purchases work the same way: the sale is recorded and the seller is
+told, but the buyer gets no email until you invoice them.
 
 ---
 
-## Step 6 — Admin reviews invoices and marks as sent
+## Step 6 — Generate, review and send invoices
 
-**Where:** `/admin/invoices/`  (navbar: *Invoices*)
+**Where:** `/admin/combined-invoices/`  (navbar: *Invoices*)
 
-1. Review all invoices grouped by seller.
-2. Confirm payment method has been received from the winner (update the
-   **Payment method** field on the invoice edit page if needed).
-3. Check the box next to each resolved invoice and click **Mark Selected as Sent**.
+Each buyer gets **one invoice per seller**, covering everything they owe that
+grower — so someone who won three of Rowan's plants over a fortnight pays once
+and is charged shipping once.
 
-For off-platform or manual sales, click **New Invoice** to create one without
-a linked listing.
+1. **Generate invoices.** The page shows how many sales are not yet invoiced;
+   pressing the button gathers them into drafts, one per buyer/seller pair.
+   Nothing is emailed at this stage.
+2. **Review each draft.** Open it to see the line items and the total. Here you
+   can:
+   - **Shipping charged** — override the added-up per-plant fees when several
+     plants ship together in one box for less.
+   - **Discount** — a flat amount off the total.
+   - **Notes** — anything you want the buyer to read on the invoice.
+3. **Save & send to buyer.** This emails them the itemised invoice with the
+   seller's payment details. It asks you to confirm first, because it cannot be
+   unsent.
+
+> A **sent** invoice can't be edited or deleted — the buyer has it in their
+> inbox, and the site must not disagree with it. If that buyer wins something
+> else from the same seller later, the next Generate run starts them a fresh
+> invoice.
+>
+> A **draft** can be deleted safely: its sales go back into the not-yet-invoiced
+> pool and the next Generate run regroups them.
+
+The number badge on **Combined Invoices** in the admin sidebar is how many
+drafts are waiting.
+
+### Individual invoices and off-platform sales
+
+`/admin/invoices/` still lists every individual sale, grouped by seller, and
+**New Invoice** there records a sale that did not happen on the site (at a show,
+say). Those go onto the buyer's next combined invoice like anything else.
 
 ---
 
@@ -183,6 +216,7 @@ python manage.py deactivate_old_listings --dry-run
 | Page | URL |
 |---|---|
 | Add Listing | `/admin/weekly-setup/` |
+| Invoices (generate/review/send) | `/admin/combined-invoices/` |
 | Invoice Dashboard | `/admin/invoices/` |
 | Django Admin | `/admin/` |
 | New Invoice | `/admin/invoices/create/` |

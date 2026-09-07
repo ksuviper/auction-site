@@ -139,7 +139,13 @@ class PublicVisibilityTests(PaymentFixtureMixin, TestCase):
 
 
 class InvoiceVisibilityTests(PaymentFixtureMixin, TestCase):
-    """The buyer named on an invoice — and only they — get the details."""
+    """
+    The buyer named on a *billed* invoice — and only they — get the details.
+
+    Being billed is the gate as well as being the right person: combined
+    invoicing means a sale sits unbilled until an admin sends the invoice
+    covering it, and until then there is nothing to pay.
+    """
 
     def setUp(self):
         super().setUp()
@@ -148,6 +154,18 @@ class InvoiceVisibilityTests(PaymentFixtureMixin, TestCase):
             amount='20.00', shipping_fee='5.00',
         )
         self.url = reverse('invoice_detail', kwargs={'pk': self.invoice.pk})
+        self._bill()
+
+    def _bill(self):
+        """Put the sale onto a combined invoice and send it."""
+        from auctions.services import (
+            generate_combined_invoices,
+            send_combined_invoice,
+        )
+
+        for draft in generate_combined_invoices():
+            send_combined_invoice(draft)
+        self.invoice.refresh_from_db()
 
     def test_the_buyer_sees_how_to_pay(self):
         self.client.force_login(self.buyer)
@@ -157,6 +175,24 @@ class InvoiceVisibilityTests(PaymentFixtureMixin, TestCase):
         self.assertContains(response, 'How to Pay')
         self.assertContains(response, '@brynn-vale')
         self.assertContains(response, 'pay@brynnvale.example')
+
+    def test_an_unbilled_sale_shows_no_payment_details_to_anyone(self):
+        """Not yet invoiced is not yet owed — see the Invoicing section."""
+        unbilled = Invoice.objects.create(
+            listing=self._listing(title='Not Billed Yet'),
+            buyer=self.buyer, seller=self.seller,
+            amount='9.00', shipping_fee='1.00',
+        )
+        self.client.force_login(self.buyer)
+
+        response = self.client.get(
+            reverse('invoice_detail', kwargs={'pk': unbilled.pk})
+        )
+
+        self.assertContains(response, 'nothing to pay yet')
+        self.assertNotContains(response, 'How to Pay')
+        for handle in HANDLES.values():
+            self.assertNotContains(response, handle)
 
     def test_another_buyer_cannot_read_them(self):
         other = User.objects.create_user('nosy', 'nosy@example.com', 'pw')

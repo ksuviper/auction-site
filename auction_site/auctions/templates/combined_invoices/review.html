@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+
+{% block title %}Review invoice #{{ invoice.pk }} — ASQ Daylily Auctions{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-xl-9">
+
+    <nav aria-label="breadcrumb" class="mb-3">
+      <ol class="breadcrumb">
+        <li class="breadcrumb-item">
+          <a href="{% url 'combined_invoice_dashboard' %}">Combined Invoices</a>
+        </li>
+        <li class="breadcrumb-item active" aria-current="page">#{{ invoice.pk }}</li>
+      </ol>
+    </nav>
+
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-1">
+      <h1 class="h2 mb-0">Invoice #{{ invoice.pk }}</h1>
+      {% if invoice.is_sent %}
+      <span class="badge bg-success fs-6 px-3 py-2">
+        Sent {{ invoice.sent_at|date:"M j, Y g:i a" }}
+      </span>
+      {% else %}
+      <span class="badge bg-warning text-dark fs-6 px-3 py-2">Draft — not sent</span>
+      {% endif %}
+    </div>
+    <p class="text-muted fs-5 mb-4">
+      <strong>{{ invoice.buyer.get_full_name|default:invoice.buyer.username }}</strong>
+      ({{ invoice.buyer.email|default:"no email on file" }})
+      owes
+      <strong>{{ invoice.seller.profile.display_name }}</strong>
+    </p>
+
+    {% if not invoice.buyer.email %}
+    <div class="alert alert-warning" role="alert">
+      <i class="fas fa-triangle-exclamation me-2" aria-hidden="true"></i>
+      This buyer has no email address on file. Sending will mark the invoice as
+      sent but nothing will reach them — get an address onto their account
+      first.
+    </div>
+    {% endif %}
+
+    <!-- ── Line items ────────────────────────────────────────────────────── -->
+    <div class="card shadow-sm mb-4">
+      <div class="card-header bg-white py-3">
+        <h2 class="h5 fw-bold mb-0">What they bought</h2>
+      </div>
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th scope="col">Plant</th>
+              <th scope="col" class="text-end">Qty</th>
+              <th scope="col" class="text-end">Item</th>
+              <th scope="col" class="text-end">Shipping</th>
+              <th scope="col">Closed</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in line_items %}
+            <tr>
+              <td>
+                {% if item.listing %}
+                <a href="{% url 'listing_detail' pk=item.listing.pk %}"
+                   class="text-decoration-none">{{ item.item_display }}</a>
+                {% else %}
+                {{ item.item_display }}
+                {% endif %}
+              </td>
+              <td class="text-end">{{ item.quantity }}</td>
+              <td class="text-end">${{ item.amount }}</td>
+              <td class="text-end">${{ item.shipping_fee }}</td>
+              <td class="text-muted">{{ item.created_at|date:"M j, Y" }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="5" class="text-muted text-center py-4">
+                No line items — nothing to bill.
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+
+      <div class="row g-4">
+        <!-- ── Adjustments ─────────────────────────────────────────────── -->
+        <div class="col-12 col-lg-7">
+          <div class="card shadow-sm h-100">
+            <div class="card-header bg-white py-3">
+              <h2 class="h5 fw-bold mb-0">Adjustments</h2>
+            </div>
+            <div class="card-body p-4">
+              {% if form.non_field_errors %}
+              <div class="alert alert-danger">{{ form.non_field_errors|join:", " }}</div>
+              {% endif %}
+
+              {% for field in form %}
+              <div class="mb-4">
+                <label for="{{ field.id_for_label }}" class="form-label fw-semibold fs-5">
+                  {{ field.label }}
+                </label>
+                {{ field }}
+                {% if field.errors %}
+                <div class="invalid-feedback d-block">{{ field.errors|join:", " }}</div>
+                {% endif %}
+                {% if field.help_text %}
+                <div class="form-text fs-6">{{ field.help_text }}</div>
+                {% endif %}
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Totals ──────────────────────────────────────────────────── -->
+        <div class="col-12 col-lg-5">
+          <div class="card shadow-sm h-100">
+            <div class="card-header bg-white py-3">
+              <h2 class="h5 fw-bold mb-0">Total</h2>
+            </div>
+            <div class="card-body p-4 fs-5">
+              <div class="d-flex justify-content-between mb-2">
+                <span>Subtotal</span>
+                <span>${{ invoice.subtotal }}</span>
+              </div>
+              <div class="d-flex justify-content-between mb-2">
+                <span>
+                  Shipping
+                  {% if invoice.shipping_override is not None %}
+                  <br><small class="text-muted">
+                    overriding ${{ invoice.summed_shipping }}
+                  </small>
+                  {% endif %}
+                </span>
+                <span>${{ invoice.total_shipping }}</span>
+              </div>
+              {% if invoice.discount_amount %}
+              <div class="d-flex justify-content-between mb-2 text-success">
+                <span>Discount</span>
+                <span>-${{ invoice.discount_amount }}</span>
+              </div>
+              {% endif %}
+              <hr>
+              <div class="d-flex justify-content-between fw-bold fs-4">
+                <span>Due</span>
+                <span>${{ invoice.total }}</span>
+              </div>
+              <p class="text-muted mt-2 mb-0" style="font-size:.9rem;">
+                Totals reflect what is saved. Save to see an edit applied here.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {% if not invoice.is_sent %}
+      <div class="d-flex flex-wrap gap-2 mt-4">
+        <button type="submit" name="action" value="save"
+                class="btn btn-outline-primary btn-lg">
+          <i class="fas fa-floppy-disk me-2" aria-hidden="true"></i>Save changes
+        </button>
+        {% comment %}
+          The send button submits the same form, so whatever is on screen is
+          what gets sent — rather than emailing the last-saved numbers and
+          quietly dropping the edit in front of the admin.
+        {% endcomment %}
+        <button type="submit" name="action" value="send"
+                class="btn btn-success btn-lg"
+                onclick="return confirm('Email this invoice to the buyer? This is the first they will hear about these purchases, and it cannot be unsent.');">
+          <i class="fas fa-paper-plane me-2" aria-hidden="true"></i>Save &amp; send to buyer
+        </button>
+        <a href="{% url 'combined_invoice_dashboard' %}"
+           class="btn btn-link btn-lg">Back without saving</a>
+      </div>
+      {% else %}
+      <div class="alert alert-secondary mt-4" role="status">
+        This invoice was sent on {{ invoice.sent_at|date:"M j, Y \a\t g:i a" }}
+        and can no longer be changed. A later win by this buyer from this seller
+        will start a fresh draft.
+      </div>
+      <a href="{% url 'combined_invoice_dashboard' %}" class="btn btn-outline-secondary btn-lg">
+        <i class="fas fa-arrow-left me-2" aria-hidden="true"></i>Back to invoices
+      </a>
+      {% endif %}
+    </form>
+
+    <!-- ── What the buyer will be told ───────────────────────────────────── -->
+    {% if payment_options %}
+    <div class="card border-0 bg-light mt-4">
+      <div class="card-body p-4">
+        <h2 class="h6 text-uppercase text-muted fw-bold mb-3">
+          Payment details the buyer will be given
+        </h2>
+        <ul class="list-unstyled mb-0 fs-5">
+          {% for label, detail in payment_options %}
+          <li><span class="fw-semibold">{{ label }}:</span> {{ detail }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+    {% else %}
+    <div class="alert alert-warning mt-4" role="alert">
+      <i class="fas fa-triangle-exclamation me-2" aria-hidden="true"></i>
+      {{ invoice.seller.profile.display_name }} has no payment details on file,
+      so the invoice will tell the buyer to ask them. Add them under
+      <strong>Payment methods</strong> on the seller's profile first.
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}

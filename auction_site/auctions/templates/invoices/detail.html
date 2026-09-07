@@ -87,12 +87,25 @@
                 </table>
 
                 {% comment %}
-                  The one place a buyer sees the seller's actual payment
-                  details — they owe this seller money, so here the handles are
-                  the point. InvoiceDetailView already restricts the page to the
+                  Payment details only once this has actually been billed. An
+                  invoice waiting to be combined is a record of a purchase, not
+                  a request for money — the buyer will be sent one invoice
+                  covering everything they owe this seller, and asking them to
+                  pay per plant here would pre-empt it.
+
+                  When it is billed, this is the one place the buyer sees the
+                  seller's handles. InvoiceDetailView restricts the page to the
                   buyer named on it (and staff).
                 {% endcomment %}
-                {% if invoice.payment_method or invoice.seller.profile.payment_options %}
+                {% if not invoice.is_sent %}
+                <div class="alert alert-info mb-4" role="status">
+                    <i class="fas fa-clock me-2" aria-hidden="true"></i>
+                    This is a record of your purchase. We'll email you an
+                    itemised invoice covering everything you have bought from
+                    {{ invoice.seller.profile.display_name }}, with payment
+                    details — there is nothing to pay yet.
+                </div>
+                {% elif invoice.payment_method or invoice.seller.profile.payment_options %}
                 <div class="mb-4">
                     <h6 class="text-uppercase text-muted small fw-bold">How to Pay</h6>
                     {% if invoice.payment_method %}

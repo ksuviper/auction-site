@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+
+{% block title %}Combined Invoices — ASQ Daylily Auctions{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+  <h1 class="h2 mb-0">
+    <i class="fas fa-layer-group me-2" aria-hidden="true"></i>Combined Invoices
+  </h1>
+  <a href="{% url 'invoice_dashboard' %}" class="btn btn-outline-secondary">
+    Individual invoices <i class="fas fa-arrow-right ms-1" aria-hidden="true"></i>
+  </a>
+</div>
+<p class="text-muted fs-5 mb-4">
+  One invoice per buyer, per seller, covering everything they owe.
+  <strong>Buyers are emailed nothing until you send an invoice from here.</strong>
+</p>
+
+{% comment %}
+  Generate first: the count is what tells an admin whether pressing it would do
+  anything, so it belongs above the drafts rather than buried under them.
+{% endcomment %}
+<div class="card border-0 bg-light mb-4">
+  <div class="card-body p-4 d-flex flex-wrap align-items-center justify-content-between gap-3">
+    <div>
+      <h2 class="h5 fw-bold mb-1">Not yet invoiced</h2>
+      {% if unbilled_count %}
+      <p class="mb-0 fs-5">
+        <strong>{{ unbilled_count }}</strong> sale{{ unbilled_count|pluralize }}
+        worth <strong>${{ unbilled_value|floatformat:2 }}</strong>, across
+        <strong>{{ unbilled_pairs }}</strong> buyer/seller
+        pair{{ unbilled_pairs|pluralize }}.
+      </p>
+      {% else %}
+      <p class="mb-0 fs-5 text-muted">
+        Nothing outstanding — every sale is already on an invoice.
+      </p>
+      {% endif %}
+    </div>
+    <form method="post" action="{% url 'combined_invoice_generate' %}">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-primary btn-lg"
+              {% if not unbilled_count %}disabled{% endif %}>
+        <i class="fas fa-wand-magic-sparkles me-2" aria-hidden="true"></i>Generate invoices
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- ── Drafts ──────────────────────────────────────────────────────────── -->
+<h2 class="h4 fw-bold mb-3">
+  Drafts
+  <span class="badge bg-warning text-dark fs-6 align-middle">{{ drafts|length }}</span>
+</h2>
+
+{% if drafts %}
+<div class="card shadow-sm mb-5">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th scope="col">#</th>
+          <th scope="col">Buyer</th>
+          <th scope="col">Seller</th>
+          <th scope="col" class="text-end">Items</th>
+          <th scope="col" class="text-end">Subtotal</th>
+          <th scope="col" class="text-end">Shipping</th>
+          <th scope="col" class="text-end">Total</th>
+          <th scope="col"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for invoice in drafts %}
+        <tr>
+          <td>{{ invoice.pk }}</td>
+          <td>{{ invoice.buyer.get_full_name|default:invoice.buyer.username }}</td>
+          <td>{{ invoice.seller.profile.display_name }}</td>
+          <td class="text-end">{{ invoice.item_count }}</td>
+          <td class="text-end">${{ invoice.subtotal }}</td>
+          <td class="text-end">
+            ${{ invoice.total_shipping }}
+            {% if invoice.shipping_override is not None %}
+            <span class="badge bg-info text-dark">set</span>
+            {% endif %}
+          </td>
+          <td class="text-end fw-bold">${{ invoice.total }}</td>
+          <td class="text-end">
+            <a href="{% url 'combined_invoice_review' invoice.pk %}"
+               class="btn btn-sm btn-primary">Review &amp; send</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<p class="text-muted fs-5 mb-5">
+  No drafts waiting. Generate invoices above when there are unbilled sales.
+</p>
+{% endif %}
+
+<!-- ── Sent ────────────────────────────────────────────────────────────── -->
+<h2 class="h4 fw-bold mb-3">
+  Sent
+  <span class="badge bg-success fs-6 align-middle">{{ sent_invoices|length }}</span>
+</h2>
+
+{% if sent_invoices %}
+<div class="card shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th scope="col">#</th>
+          <th scope="col">Buyer</th>
+          <th scope="col">Seller</th>
+          <th scope="col" class="text-end">Items</th>
+          <th scope="col" class="text-end">Total</th>
+          <th scope="col">Sent</th>
+          <th scope="col"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for invoice in sent_invoices %}
+        <tr>
+          <td>{{ invoice.pk }}</td>
+          <td>{{ invoice.buyer.get_full_name|default:invoice.buyer.username }}</td>
+          <td>{{ invoice.seller.profile.display_name }}</td>
+          <td class="text-end">{{ invoice.item_count }}</td>
+          <td class="text-end fw-bold">${{ invoice.total }}</td>
+          <td>{{ invoice.sent_at|date:"M j, Y g:i a" }}</td>
+          <td class="text-end">
+            <a href="{% url 'combined_invoice_review' invoice.pk %}"
+               class="btn btn-sm btn-outline-secondary">View</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<p class="text-muted fs-5">Nothing sent yet.</p>
+{% endif %}
+{% endblock %}
