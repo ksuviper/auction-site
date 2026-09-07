@@ -14,6 +14,11 @@ A "seller" is a user account with the seller flag ticked — see
 - Weekly auction rotation, with listings added one at a time through a guided
   setup flow
 - Sellers are user accounts, with a read-only sales dashboard of their own
+- Per-seller payment details (Venmo, PayPal, Zelle, Cash App, Apple/Google Pay)
+  shown to buyers on their invoice
+- Copy an earlier listing to relist a plant, from Add Listing or the admin
+- Listings that have actually sold are frozen in the admin; ones that expired
+  unsold stay editable and can be re-dated
 - Automatic auction closing, winner assignment, and invoice generation (APScheduler)
 - Paid memberships via PayPal subscriptions, gating bidding and purchasing (US residents only)
 - Buy It Now listings alongside standard auctions, with per-listing stock so
@@ -163,7 +168,7 @@ seller-specific detail now lives on `UserProfile`:
 | `is_seller` | — | Ticking this is the whole of "make someone a seller". |
 | `seller_bio` | `Seller.bio` | Shown on their public page. |
 | `seller_shipping_fee` | `Seller.shipping_fee` | Their standard shipping charge, used by any of their listings that does not set its own. Nullable — no fee on file means free shipping. |
-| `seller_payment_methods` | `Seller.accepted_payment_methods` | Free text, e.g. `PayPal, Venmo, Zelle`. |
+| `seller_payment_methods` | `Seller.accepted_payment_methods` | **Other payment notes** — anything the named methods below do not cover (a postal address for cheques, "cash at pickup"). |
 | `seller_category` | — | The category they primarily list under. |
 | `seller_active_week` | `Seller.active_week` | Start date of the week they are featured. |
 | `seller_notify_on_comments` | `Seller.notify_on_comments` | Email them when a buyer asks a question. |
@@ -178,6 +183,30 @@ tolerates a missing profile row. Nothing should format a seller's name by hand.
 because a listing with no seller has nobody to pay and no shipping fee to quote;
 `PROTECT` because deleting an account that has sold plants would orphan the
 invoices that record it.
+
+### Payment methods
+
+Six named fields on `UserProfile` hold how a seller gets paid: `paypal_info`,
+`venmo_info`, `zelle_info`, `cashapp_info`, `apple_pay_info`, `google_pay_info`,
+plus `seller_payment_methods` for anything else. All are **free text, not
+URLs** — Venmo, PayPal and Cash App have real payment links, but Zelle has only
+an email or phone number, and Apple/Google Pay are not visit-a-link methods at
+all, so each field holds whatever the seller wants shown.
+
+Two properties read them, and everything else goes through those rather than
+touching the fields directly:
+
+| Property | Returns | Used by |
+|---|---|---|
+| `payment_method_names` | `['PayPal', 'Venmo']` — names only | Public seller page, listing page |
+| `payment_options` | `[('PayPal', 'pay@…'), …]` — names and details | Invoice page, invoice emails (via `utils.payment_block`) |
+
+> **The public pages name the methods; only an invoice shows the handles.** A
+> buyer deciding whether to bid needs to know they can pay by Venmo; the handle
+> itself is only useful once they owe money, and `InvoiceDetailView` restricts
+> that page to the buyer named on it (plus staff). If you would rather the
+> handles were public too, showing `payment_options` on the seller page is a
+> one-line change.
 
 ### Making someone a seller
 
@@ -210,6 +239,46 @@ accounts as above and re-enter the current week's listings.
 
 ---
 
+## Copying and Locking Listings
+
+### Copying
+
+`auctions.services.copy_listing(source)` is the one place that decides what a
+copy inherits, shared by the admin's **Duplicate** action and **Copy an existing
+listing** on the Add Listing page — so the two cannot drift.
+
+A copy takes everything describing the plant (title, description, image,
+category, seller, type, prices, quantity, shipping) and resets everything about
+the *run*: dates cleared, stock back to full, no bids, no winner, not closed,
+**not active**. It comes back unsaved, because the model requires dates and new
+dates are the entire reason to copy something.
+
+- **Admin → Duplicate** saves the copy (keeping the original's dates as a
+  placeholder, inactive) and drops you straight into its change form. With
+  several selected it copies them all and stays on the list, since there is no
+  single page to open.
+- **Add Listing → Copy an existing listing** offers only *that seller's* own
+  listings and prefills the form, leaving the dates blank.
+
+The copy shares the original's image file rather than duplicating it in storage,
+so deleting one listing does not take the other's photo with it.
+
+### Locking
+
+A listing is frozen once someone has actually bought from it —
+`AuctionListing.has_completed_sale`: a winner for an auction, or any invoice for
+Buy It Now (where several buyers can each take a share and `winner` stays
+unset). In the admin such a listing is **readable but not editable or
+deletable**; its title and price are what an invoice says a buyer agreed to. The
+**Sold** column on the listing changelist shows which ones are locked.
+
+> **Expiring unsold is not selling.** A listing that ran its course with no bids
+> and no buyers stays fully editable, so an admin can give it new dates and
+> reactivate it without copying it first. Duplicating a sold listing is also
+> still allowed — freezing the record must not block relisting the plant.
+
+---
+
 ## Buy It Now Stock
 
 A Buy It Now listing carries a quantity, and **several buyers can each purchase
@@ -224,8 +293,8 @@ sell one lot to one `winner`.
 | `shipping_fee` | What shipping costs for this listing. Blank falls back to the seller's standard fee, so plants that ship differently can be priced individually. `listing.shipping_rate` resolves the two. |
 | `Invoice.quantity` | Units on that invoice. One invoice per purchase, so one listing can have several. `Invoice.amount` is the line total (unit price × quantity), not the unit price. |
 
-An admin sets the quantity, shipping cost and shipping mode on the **Weekly
-Setup** add-listing form; those inputs appear only when the listing type is Buy
+An admin sets the quantity, shipping cost and shipping mode on the **Add
+Listing** form; those inputs appear only when the listing type is Buy
 It Now. The shipping cost box starts at the seller's standard fee, so it always
 shows what the buyer would pay and an override is a deliberate edit. Duplicating a listing in
 the admin resets its stock to full rather than inheriting how far the original

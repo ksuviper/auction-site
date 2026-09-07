@@ -44,13 +44,18 @@
         <p class="fs-5 mb-3">{{ seller_profile.seller_bio }}</p>
         {% endif %}
         <div class="row g-2">
-          {% if seller_profile.seller_payment_methods %}
+          {% comment %}
+            Method names only. The handles and addresses are payment details a
+            buyer needs once they owe money, so they live on their invoice
+            rather than on a page anyone can load.
+          {% endcomment %}
+          {% if seller_profile.payment_method_names %}
           <div class="col-sm-6">
             <div class="d-flex align-items-start gap-2">
               <i class="fas fa-credit-card text-primary mt-1"></i>
               <div>
                 <div class="fw-semibold">Accepted Payments</div>
-                <div class="text-muted">{{ seller_profile.seller_payment_methods }}</div>
+                <div class="text-muted">{{ seller_profile.payment_method_names|join:", " }}</div>
               </div>
             </div>
           </div>

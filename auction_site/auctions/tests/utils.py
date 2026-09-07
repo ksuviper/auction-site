@@ -22,7 +22,11 @@ def make_seller(
     first_name='',
     last_name='',
     shipping_fee='5.00',
-    payment_methods='PayPal',
+    # A named method rather than the free-text note, which is now only for
+    # things the named fields do not cover. Pass paypal_info='' for a seller
+    # with no payment details at all.
+    paypal_info='PayPal',
+    payment_notes='',
     category=None,
     active_week=None,
     notify_on_comments=True,
@@ -52,7 +56,8 @@ def make_seller(
         is_approved=True,
         is_seller=True,
         seller_shipping_fee=shipping_fee,
-        seller_payment_methods=payment_methods,
+        paypal_info=paypal_info,
+        seller_payment_methods=payment_notes,
         seller_category=category,
         seller_active_week=active_week,
         seller_notify_on_comments=notify_on_comments,

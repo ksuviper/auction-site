@@ -85,9 +85,31 @@ class UserProfile(models.Model):
             'listings that does not set its own.'
         ),
     )
+    # ── How to pay this seller ───────────────────────────────────────────────
+    # Free text, not URLs. Venmo, PayPal and Cash App have real payment links,
+    # but Zelle has no link at all (just an email or phone), and Apple/Google
+    # Pay are not visit-a-link methods either — so each field holds whatever
+    # the seller wants shown: a handle, a link, an email, a phone number.
+    venmo_info = models.CharField(max_length=255, blank=True, verbose_name='Venmo')
+    paypal_info = models.CharField(max_length=255, blank=True, verbose_name='PayPal')
+    cashapp_info = models.CharField(
+        max_length=255, blank=True, verbose_name='Cash App'
+    )
+    apple_pay_info = models.CharField(
+        max_length=255, blank=True, verbose_name='Apple Pay'
+    )
+    google_pay_info = models.CharField(
+        max_length=255, blank=True, verbose_name='Google Pay'
+    )
+    zelle_info = models.CharField(max_length=255, blank=True, verbose_name='Zelle')
     seller_payment_methods = models.TextField(
         blank=True,
-        help_text='e.g. PayPal, Venmo, Zelle',
+        verbose_name='Other payment notes',
+        help_text=(
+            'Anything the named fields above do not cover — a mailing address '
+            'for cheques, "cash at pickup", or a note about how they prefer to '
+            'be paid.'
+        ),
     )
     seller_category = models.ForeignKey(
         AuctionCategory,
@@ -105,6 +127,50 @@ class UserProfile(models.Model):
         default=True,
         help_text='Email this seller when a buyer posts a question on their listing.',
     )
+
+    # Field name -> the label a buyer sees. Ordered by how commonly these get
+    # used for plant sales, since that is the order they are read in.
+    PAYMENT_FIELDS = (
+        ('paypal_info', 'PayPal'),
+        ('venmo_info', 'Venmo'),
+        ('zelle_info', 'Zelle'),
+        ('cashapp_info', 'Cash App'),
+        ('apple_pay_info', 'Apple Pay'),
+        ('google_pay_info', 'Google Pay'),
+    )
+
+    @property
+    def payment_options(self):
+        """
+        The seller's payment details as ``[(label, detail), ...]``.
+
+        Only the ones actually filled in, so a seller who takes PayPal and
+        nothing else does not advertise five blank methods. One source for the
+        invoice page and the invoice email, which must not disagree about how
+        to pay someone.
+        """
+        options = [
+            (label, getattr(self, field).strip())
+            for field, label in self.PAYMENT_FIELDS
+            if getattr(self, field).strip()
+        ]
+        if self.seller_payment_methods.strip():
+            options.append(('Other', self.seller_payment_methods.strip()))
+        return options
+
+    @property
+    def payment_method_names(self):
+        """
+        Just the names of the methods accepted — no handles or addresses.
+
+        What the public seller page shows. A buyer deciding whether to bid needs
+        to know they can pay by Venmo; the handle itself is only useful once
+        they owe money, so it stays on their own invoice.
+        """
+        return [
+            label for field, label in self.PAYMENT_FIELDS
+            if getattr(self, field).strip()
+        ]
 
     @property
     def display_name(self) -> str:
@@ -270,6 +336,29 @@ class AuctionListing(models.Model):
                 self.quantity_remaining = self.quantity_available
 
         super().save(*args, **kwargs)
+
+    @property
+    def has_completed_sale(self) -> bool:
+        """
+        Whether this listing actually sold something to somebody.
+
+        Deliberately not "is it over": a listing that ran its course with no
+        bids and no buyers has sold nothing, and an admin should be free to give
+        it new dates and run it again rather than having to copy it first. What
+        must not change underneath a sale is a listing somebody has committed to
+        buy — its title and price are what the invoice says they agreed to.
+
+        For an auction that means a winner; for Buy It Now, any invoice at all,
+        since several buyers can each take a share and `winner` stays unset.
+        """
+        if self.listing_type == 'buy_now':
+            # The admin changelist annotates _has_invoice so a page of rows
+            # costs one query instead of one per row; fall back to asking.
+            annotated = getattr(self, '_has_invoice', None)
+            if annotated is not None:
+                return bool(annotated)
+            return self.invoices.exists()
+        return self.winner_id is not None
 
     @property
     def units_remaining(self) -> int:

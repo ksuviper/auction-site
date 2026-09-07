@@ -35,7 +35,7 @@ from .models import (
     UserProfile,
 )
 from .services import run_proxy_bids
-from .utils import _safe_send, has_active_subscription
+from .utils import _safe_send, has_active_subscription, payment_block
 
 User = get_user_model()
 
@@ -539,10 +539,7 @@ class BuyNowView(LoginRequiredMixin, View):
             seller_profile.display_name if seller_profile
             else seller.get_username()
         )
-        payment_methods = (
-            getattr(seller_profile, 'seller_payment_methods', '')
-            or '(ask the seller)'
-        )
+        payment_methods = payment_block(seller_profile)
         admin_email = getattr(settings, 'ADMIN_EMAIL', '')
         shipping_note = (
             'per item' if listing.shipping_mode == 'per_item' else 'flat rate'

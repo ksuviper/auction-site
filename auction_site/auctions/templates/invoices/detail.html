@@ -86,15 +86,27 @@
                     </tfoot>
                 </table>
 
-                {% if invoice.payment_method or invoice.seller.profile.seller_payment_methods %}
+                {% comment %}
+                  The one place a buyer sees the seller's actual payment
+                  details — they owe this seller money, so here the handles are
+                  the point. InvoiceDetailView already restricts the page to the
+                  buyer named on it (and staff).
+                {% endcomment %}
+                {% if invoice.payment_method or invoice.seller.profile.payment_options %}
                 <div class="mb-4">
-                    <h6 class="text-uppercase text-muted small fw-bold">Payment</h6>
+                    <h6 class="text-uppercase text-muted small fw-bold">How to Pay</h6>
                     {% if invoice.payment_method %}
-                        <p class="mb-0">Method: <strong>{{ invoice.payment_method }}</strong></p>
-                    {% else %}
-                        <p class="mb-0 text-muted">
-                            Accepted: {{ invoice.seller.profile.seller_payment_methods }}
-                        </p>
+                        <p class="mb-2">Agreed method: <strong>{{ invoice.payment_method }}</strong></p>
+                    {% endif %}
+                    {% if invoice.seller.profile.payment_options %}
+                    <ul class="list-unstyled mb-0">
+                        {% for label, detail in invoice.seller.profile.payment_options %}
+                        <li class="mb-1">
+                            <span class="fw-semibold">{{ label }}:</span>
+                            <span class="text-break">{{ detail }}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
                     {% endif %}
                 </div>
                 {% endif %}

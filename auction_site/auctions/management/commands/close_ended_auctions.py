@@ -18,7 +18,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from auctions.models import AuctionListing, Invoice
-from auctions.utils import _safe_send, seller_display_name
+from auctions.utils import _safe_send, payment_block, seller_display_name
 
 logger = logging.getLogger(__name__)
 
@@ -166,10 +166,7 @@ class Command(BaseCommand):
             return
 
         seller = listing.seller
-        payments = (
-            getattr(seller.profile, 'seller_payment_methods', '')
-            or '(ask the seller)'
-        )
+        payments = payment_block(getattr(seller, 'profile', None))
         seller_block = (
             f'\nSeller:              {seller_display_name(seller)}'
             f'\nAccepted payments:   {payments}'

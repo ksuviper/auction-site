@@ -1,7 +1,9 @@
 from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from django.db.models import Q
+from django.db.models import Exists, OuterRef, Q
+from django.shortcuts import redirect
+from django.urls import reverse
 from django.utils.html import mark_safe
 from unfold.admin import ModelAdmin, StackedInline, TabularInline
 from unfold.forms import (
@@ -21,8 +23,15 @@ from .models import (
     UserProfile,
     Wishlist,
 )
+from .services import copy_listing
 
 User = get_user_model()
+
+# Derived from the model rather than retyped, so a new payment method appears
+# in the admin the moment it is added to UserProfile.PAYMENT_FIELDS.
+PAYMENT_FIELD_NAMES = tuple(
+    field for field, _label in UserProfile.PAYMENT_FIELDS
+) + ('seller_payment_methods',)
 
 
 class BuyNowStockFilter(admin.SimpleListFilter):
@@ -58,22 +67,49 @@ class BuyNowStockFilter(admin.SimpleListFilter):
 
 @admin.action(description='Duplicate selected listing(s) for re-use next week')
 def duplicate_listings(modeladmin, request, queryset):
-    count = queryset.count()
+    """
+    Copy the selected listings, then open the copy for editing.
+
+    Copying is delegated to services.copy_listing so this and Copy Existing
+    Listing on the Add Listing page cannot disagree about what carries over.
+
+    A copy has no dates — the model requires them — so each one is saved with
+    the original's window as a placeholder and left inactive. Landing on the
+    change form is the point: dates are the whole reason you are duplicating,
+    and the old version dropped you back on the list where it was easy to
+    forget.
+    """
+    copies = []
     for listing in queryset:
-        listing.pk = None
-        listing._state.adding = True
-        listing.winner = None
-        listing.is_closed = False
-        listing.is_active = True
-        listing.current_bid = 0
-        # listing_type, buy_now_price, quantity_available and shipping_mode all
-        # carry over with the cloned instance. Stock is reset rather than
-        # inherited: a duplicate is next week's listing, so it starts fully
-        # available instead of picking up how far the original sold down.
-        if listing.listing_type == 'buy_now':
-            listing.quantity_remaining = listing.quantity_available
-        listing.save()
-    modeladmin.message_user(request, f'Duplicated {count} listing(s). Update dates before going live.')
+        copy = copy_listing(listing)
+        copy.starts_at = listing.starts_at
+        copy.ends_at = listing.ends_at
+        copy.save()
+        copies.append(copy)
+
+    if not copies:
+        modeladmin.message_user(
+            request, 'Nothing selected — nothing copied.', level=messages.INFO
+        )
+        return
+
+    if len(copies) == 1:
+        modeladmin.message_user(
+            request,
+            f'Copied "{copies[0].title}". Set its dates and tick Is active to '
+            'put it live.',
+            level=messages.SUCCESS,
+        )
+        return redirect(
+            reverse('admin:auctions_auctionlisting_change', args=[copies[0].pk])
+        )
+
+    modeladmin.message_user(
+        request,
+        f'Copied {len(copies)} listings. Each is inactive and still carries the '
+        "original's dates — open them and set new ones before going live.",
+        level=messages.SUCCESS,
+    )
 
 admin.site.site_header = 'ASQ Daylily Auctions Admin'
 admin.site.site_title = 'ASQ Daylily Auctions Admin Portal'
@@ -218,12 +254,25 @@ class UserProfileAdmin(ModelAdmin):
                 'fields': (
                     'is_seller', 'seller_category', 'seller_active_week',
                     'seller_bio', 'seller_shipping_fee',
-                    'seller_payment_methods', 'seller_notify_on_comments',
+                    'seller_notify_on_comments',
                 ),
                 'description': (
                     'Only used when "Is seller" is ticked. Sellers can be '
                     'chosen when adding a listing and get a read-only sales '
                     'dashboard; they cannot create or edit listings themselves.'
+                ),
+            },
+        ),
+        (
+            'Payment methods',
+            {
+                'fields': PAYMENT_FIELD_NAMES,
+                'description': (
+                    'How buyers pay this seller. Free text — a handle, a link, '
+                    'an email or a phone number, whatever the seller wants '
+                    'shown. Leave a method blank if they do not accept it. '
+                    'Buyers see these details on their invoice; the public '
+                    'seller page lists only which methods are accepted.'
                 ),
             },
         ),
@@ -279,6 +328,7 @@ class AuctionListingAdmin(ModelAdmin):
         'ends_at',
         'is_active',
         'is_closed',
+        'sold_display',
         'winner',
     )
     list_filter = (
@@ -293,6 +343,51 @@ class AuctionListingAdmin(ModelAdmin):
     list_select_related = ('seller__profile', 'category')
     date_hierarchy = 'starts_at'
     readonly_fields = ('image_preview',)
+
+    def get_queryset(self, request):
+        """
+        Annotate whether each row has sold, for the Sold column and the lock.
+
+        An Exists subquery rather than the model property, which would issue one
+        query per Buy It Now row on the changelist.
+        """
+        return super().get_queryset(request).annotate(
+            _has_invoice=Exists(
+                Invoice.objects.filter(listing=OuterRef('pk'))
+            )
+        )
+
+    def has_change_permission(self, request, obj=None):
+        """
+        Freeze a listing once somebody has bought from it.
+
+        Django falls back to the view permission when change is denied, so the
+        listing stays fully readable in the admin — which it has to be, since
+        invoices point at it — just not editable. A listing that merely expired
+        unsold is untouched by this and can be re-dated and run again.
+
+        obj is None on the changelist and for the actions; denying there would
+        take the whole model read-only, including Duplicate.
+        """
+        if obj is not None and obj.has_completed_sale:
+            return False
+        return super().has_change_permission(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        """
+        Deleting a sold listing is refused for the same reason as editing it.
+
+        Invoice.listing is PROTECT, so the delete would fail at the database
+        anyway — this turns an unexplained error page into a greyed-out button.
+        """
+        if obj is not None and obj.has_completed_sale:
+            return False
+        return super().has_delete_permission(request, obj)
+
+    @admin.display(description='Sold', boolean=True, ordering='_has_invoice')
+    def sold_display(self, obj):
+        """Whether this listing is locked — visible without opening each one."""
+        return obj.has_completed_sale
 
     @admin.display(description='Seller', ordering='seller__username')
     def seller_display(self, obj):
@@ -496,9 +591,8 @@ class UserProfileInline(StackedInline):
     fields = (
         'is_approved', 'is_seller', 'subscription_required', 'phone_number',
         'country', 'address', 'notes', 'seller_category', 'seller_active_week',
-        'seller_bio', 'seller_shipping_fee', 'seller_payment_methods',
-        'seller_notify_on_comments',
-    )
+        'seller_bio', 'seller_shipping_fee', 'seller_notify_on_comments',
+    ) + PAYMENT_FIELD_NAMES
 
 
 # Replace the default auth User admin so the profile (and its

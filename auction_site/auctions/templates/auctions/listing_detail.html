@@ -341,9 +341,10 @@
            class="fw-semibold fs-5 d-block mb-2">
           <i class="fas fa-store me-2 text-primary"></i>{{ listing.seller.profile.display_name }}
         </a>
-        {% if listing.seller.profile.seller_payment_methods %}
+        {% if listing.seller.profile.payment_method_names %}
         <div class="text-muted mb-1">
-          <i class="fas fa-credit-card me-2"></i>{{ listing.seller.profile.seller_payment_methods }}
+          <i class="fas fa-credit-card me-2"></i>Accepts
+          {{ listing.seller.profile.payment_method_names|join:", " }}
         </div>
         {% endif %}
         <div class="text-muted">

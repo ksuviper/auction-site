@@ -341,12 +341,12 @@ UNFOLD = {
                 ],
             },
             {
-                "title": "Weekly Setup",
+                "title": "Add Listing",
                 "separator": True,
                 "collapsible": False,
                 "items": [
                     {
-                        "title": "New Weekly Auction",
+                        "title": "Add a Listing",
                         "icon": "event",
                         "link": reverse_lazy("weekly_setup"),
                     },

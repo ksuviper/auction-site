@@ -341,6 +341,116 @@ class BulkFormsetRemovedTests(TestCase):
             get_template('weekly_setup/listings.html')
 
 
+class CopyExistingListingTests(WeeklySetupTestCase):
+    """
+    "Copy an existing listing" prefills the form from an earlier one.
+
+    It offers only this seller's own listings: copying carries a price and a
+    description across, and one grower's plants are not another's to relist.
+    """
+
+    def _copy(self, listing):
+        return self.client.get(self.url, {'copy_from': listing.pk})
+
+    def _existing(self, **overrides):
+        now = timezone.now()
+        data = dict(
+            title='Last Week Lily',
+            description='Ruffled edges.',
+            category=self.category,
+            seller=self.seller,
+            listing_type='buy_now',
+            start_price='14.00',
+            buy_now_price='14.00',
+            quantity_available=5,
+            shipping_mode='per_item',
+            shipping_fee='7.25',
+            starts_at=now - timedelta(days=9),
+            ends_at=now - timedelta(days=2),
+            is_closed=True,
+            is_active=False,
+        )
+        data.update(overrides)
+        return AuctionListing.objects.create(**data)
+
+    def test_the_picker_offers_this_sellers_listings(self):
+        self._existing()
+
+        response = self.client.get(self.url)
+
+        self.assertContains(response, 'Copy an existing listing')
+        self.assertContains(response, 'Last Week Lily')
+
+    def test_the_picker_is_hidden_when_the_seller_has_nothing_yet(self):
+        response = self.client.get(self.url)
+
+        self.assertFalse(response.context['copy_choices'])
+        self.assertNotContains(response, 'Copy an existing listing')
+
+    def test_copying_prefills_the_plant_details(self):
+        source = self._existing()
+
+        initial = self._copy(source).context['form'].initial
+
+        self.assertEqual(initial['title'], 'Last Week Lily')
+        self.assertEqual(initial['description'], 'Ruffled edges.')
+        self.assertEqual(initial['category'], self.category.pk)
+        self.assertEqual(initial['listing_type'], 'buy_now')
+        self.assertEqual(initial['buy_now_price'], Decimal('14.00'))
+        self.assertEqual(initial['quantity_available'], 5)
+        self.assertEqual(initial['shipping_mode'], 'per_item')
+        self.assertEqual(initial['shipping_fee'], Decimal('7.25'))
+
+    def test_copying_leaves_the_dates_blank(self):
+        """New dates are the reason to copy; inheriting them relists the past."""
+        initial = self._copy(self._existing()).context['form'].initial
+
+        self.assertIsNone(initial['starts_at'])
+        self.assertIsNone(initial['ends_at'])
+
+    def test_copying_says_what_it_did(self):
+        response = self._copy(self._existing())
+
+        self.assertContains(response, 'Last Week Lily')
+        self.assertContains(response, 'Set the dates')
+
+    def test_another_sellers_listing_cannot_be_copied(self):
+        other = make_seller('rival', first_name='Rival')
+        theirs = self._existing(seller=other, title='Not Yours')
+
+        initial = self._copy(theirs).context['form'].initial
+
+        self.assertNotEqual(initial.get('title'), 'Not Yours')
+
+    def test_a_stale_pk_falls_back_to_a_normal_blank_form(self):
+        response = self._copy_pk(999999)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.context['copy_from'])
+
+    def _copy_pk(self, pk):
+        return self.client.get(self.url, {'copy_from': pk})
+
+    def test_saving_a_copy_creates_a_second_independent_listing(self):
+        source = self._existing()
+        now = timezone.now()
+
+        self.client.post(self.url, self.payload(
+            title='Last Week Lily', listing_type='buy_now', start_price='',
+            buy_now_price='14.00', quantity_available='5',
+            shipping_mode='per_item', shipping_fee='7.25',
+            starts_at=(now + timedelta(days=1)).strftime('%Y-%m-%dT%H:%M'),
+            ends_at=(now + timedelta(days=8)).strftime('%Y-%m-%dT%H:%M'),
+        ))
+
+        copies = AuctionListing.objects.filter(title='Last Week Lily')
+        self.assertEqual(copies.count(), 2)
+        fresh = copies.exclude(pk=source.pk).get()
+        self.assertTrue(fresh.is_active)
+        self.assertFalse(fresh.is_closed)
+        self.assertEqual(fresh.quantity_remaining, 5)
+
+
 class ListingShippingFeeTests(WeeklySetupTestCase):
     """Buy It Now listings can price their own shipping.
 

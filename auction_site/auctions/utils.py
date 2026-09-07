@@ -53,6 +53,22 @@ def seller_display_name(user) -> str:
     return user.get_username()
 
 
+def payment_block(profile, indent='                 ') -> str:
+    """
+    A seller's payment details laid out for a plain-text email.
+
+    Reads UserProfile.payment_options so an email and the invoice page cannot
+    end up telling a buyer to pay two different Venmo handles. Multiple methods
+    go one per line, aligned under the first, which a single comma-joined run
+    of handles is genuinely hard to read.
+    """
+    options = getattr(profile, 'payment_options', None) or []
+    if not options:
+        return '(ask the seller)'
+    lines = [f'{label}: {detail}' for label, detail in options]
+    return f'\n{indent}'.join(lines)
+
+
 def has_active_subscription(user) -> bool:
     """
     Return True if ``user`` is allowed to bid or make purchases.

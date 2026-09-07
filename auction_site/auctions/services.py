@@ -12,6 +12,60 @@ logger = logging.getLogger(__name__)
 
 INCREMENT = Decimal('1.00')
 
+# What a copy inherits: everything describing the plant and how it is sold.
+# Anything about a particular run of the listing — dates, stock left, bids,
+# winner, open/closed — is reset by copy_listing() instead.
+#
+# One list, used by both the admin Duplicate action and Copy Existing Listing on
+# the Add Listing page, so the two cannot drift into copying different things. A
+# new descriptive field belongs here the day it is added to the model.
+COPIED_LISTING_FIELDS = (
+    'title',
+    'description',
+    'image',
+    'category_id',
+    'seller_id',
+    'listing_type',
+    'start_price',
+    'reserve_price',
+    'buy_now_price',
+    'quantity_available',
+    'shipping_mode',
+    'shipping_fee',
+)
+
+
+def copy_listing(source):
+    """
+    Build an unsaved copy of ``source``, ready for new dates.
+
+    Returns a new AuctionListing that is *not* saved: starts_at and ends_at are
+    None, and the model requires both, so the caller decides when it goes live.
+    Stock is restocked to full rather than inherited — a copy is next week's
+    listing, not a continuation of how far the original sold down — and bidding
+    history, the winner and the closed/active flags all start clean.
+
+    The image is shared with the source rather than duplicated in storage: both
+    rows point at the same uploaded file, so deleting one listing does not take
+    the other's photo with it (Django does not delete files on row delete).
+    """
+    copy = AuctionListing(
+        **{field: getattr(source, field) for field in COPIED_LISTING_FIELDS}
+    )
+
+    copy.starts_at = None
+    copy.ends_at = None
+    copy.current_bid = 0
+    copy.winner = None
+    copy.is_closed = False
+    # Inactive until an admin has given it dates and looked it over; an active
+    # listing with no dates is not something to create by accident.
+    copy.is_active = False
+    if copy.listing_type == 'buy_now':
+        copy.quantity_remaining = copy.quantity_available
+
+    return copy
+
 
 @transaction.atomic
 def run_proxy_bids(listing):

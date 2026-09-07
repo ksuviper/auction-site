@@ -12,8 +12,16 @@ seller record to create. Do this once, the first time someone sells with you:
 
 1. In the Django admin, go to **Users → Users** and open their account.
 2. On their profile, tick **Is seller**.
-3. Fill in their **standard shipping fee**, **payment methods** (e.g.
-   `PayPal, Venmo, Zelle`), category and the week they are featured.
+3. Fill in their **standard shipping fee**, category and the week they are
+   featured.
+4. Under **Payment methods**, fill in however they want to be paid — a Venmo
+   handle, a PayPal address, a Zelle phone number. Leave a method blank if they
+   do not accept it, and use **Other payment notes** for anything the named
+   fields do not cover.
+
+> Buyers see these details on their own invoice, where they owe that seller
+> money. The public seller page lists only *which* methods are accepted, not the
+> handles.
 
 They are then selectable in Step 1 from that moment on, every week, with no
 repeat setup. If nobody has been flagged yet, Step 1 says so and links you here
@@ -27,7 +35,7 @@ rather than showing an empty dropdown.
 
 ## Step 1 — Select the seller
 
-**Where:** `/admin/weekly-setup/`  (navbar: *Weekly Setup*)
+**Where:** `/admin/weekly-setup/`  (navbar: *Add Listing*)
 
 1. Pick the seller from the dropdown.
 2. Click **Continue to Listings**.
@@ -63,11 +71,30 @@ entries.
 **Category, start time and end time carry over to the next entry**, since a
 week's plants almost always share them. Everything else starts blank.
 
+### Re-listing a plant you have sold before
+
+Use **Copy an existing listing** at the top of the page. Pick one of this
+seller's past listings, click **Copy details**, and the form fills in with the
+plant's name, description, type, prices, quantity and shipping. The dates always
+start blank — set new ones and save it as a new listing. The original is left
+untouched.
+
+The same thing is available in the Django admin: select a listing on **Auction
+Listings** and choose **Duplicate selected listing(s)**. That saves the copy
+immediately and opens it for editing; it is inactive until you set its dates and
+tick **Is active**.
+
 Underneath the form is a read-only list of everything added for this seller so
 far, newest first, so you can see your entries land. It is for reference only —
 to change or remove a listing, use the **View in admin** link on its row.
 
 When you have added everything, click **Finish**.
+
+> **Note:** A listing somebody has actually bought from is locked in the admin —
+> readable, but not editable or deletable, because its title and price are what
+> the buyer's invoice says they agreed to. The **Sold** column shows which ones.
+> A listing that simply expired with no bids is *not* locked: give it new dates
+> and tick **Is active** to run it again.
 
 > **Tip:** To re-use a listing from a previous week, go to the Django admin
 > → Auction Listings, select the listing, and choose the
@@ -150,7 +177,7 @@ python manage.py deactivate_old_listings --dry-run
 
 | Page | URL |
 |---|---|
-| Weekly Setup | `/admin/weekly-setup/` |
+| Add Listing | `/admin/weekly-setup/` |
 | Invoice Dashboard | `/admin/invoices/` |
 | Django Admin | `/admin/` |
 | New Invoice | `/admin/invoices/create/` |

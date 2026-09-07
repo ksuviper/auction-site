@@ -4,6 +4,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
 
 from .mixins import StaffRequiredMixin
+from .services import copy_listing
 from .weekly_setup_forms import AuctionListingForm, WeeklySellerForm, seller_queryset
 
 User = get_user_model()
@@ -74,19 +75,55 @@ class WeeklyListingCreateView(StaffRequiredMixin, View):
             .order_by('-created_at')
         )
 
-    def _initial(self, seller):
+    def _copy_source(self, request, seller):
         """
-        Carry the previous listing's category and dates into the next one.
+        The listing to copy from, when ``?copy_from=`` names one.
 
-        A week's listings almost always share a category and a start/end window,
-        so repeating them by hand for every entry is the tax that made the bulk
-        grid feel necessary. Title, description, image and price stay blank —
-        those are per-plant.
+        Scoped to this seller's own listings: copying carries a price and a
+        description across, and one grower's plants are not another's to
+        re-list. A pk that is not theirs is treated as no request at all rather
+        than 404, since a stale link should still land on a usable form.
+        """
+        pk = request.GET.get('copy_from')
+        if not pk:
+            return None
+        return self._listings(seller).filter(pk=pk).first()
+
+    def _initial(self, seller, copy_from=None):
+        """
+        Prefill the form — from a listing being copied, or from the last entry.
+
+        Copying fills in everything describing the plant and leaves the dates
+        blank, because new dates are the entire reason to copy something.
+
+        Otherwise a week's listings almost always share a category and a
+        start/end window, so those carry over from the previous entry; repeating
+        them by hand for every plant is the tax that made the old bulk grid feel
+        necessary. Title, description, image and price stay blank — those are
+        per-plant.
 
         Shipping starts at the seller's standard fee so the box always shows
         what the buyer would actually pay; overriding it for a plant that ships
         differently is then a deliberate edit rather than a blank to remember.
         """
+        if copy_from is not None:
+            copy = copy_listing(copy_from)
+            initial = {
+                field: getattr(copy, field)
+                for field in (
+                    'title', 'description', 'listing_type', 'start_price',
+                    'reserve_price', 'buy_now_price', 'quantity_available',
+                    'shipping_mode', 'shipping_fee',
+                )
+            }
+            # copy_listing works in _id terms; the form field is 'category'.
+            initial['category'] = copy.category_id
+            # Stated rather than left out, so it reads as a decision: a copy
+            # inherits the plant, never the window it last ran in.
+            initial['starts_at'] = None
+            initial['ends_at'] = None
+            return initial
+
         initial = {'shipping_fee': seller.profile.seller_shipping_fee}
 
         previous = self._listings(seller).first()
@@ -98,17 +135,33 @@ class WeeklyListingCreateView(StaffRequiredMixin, View):
             })
         return initial
 
-    def _context(self, seller, form):
+    def _context(self, seller, form, copy_from=None):
+        listings = self._listings(seller)
         return {
             'seller': seller,
             'form': form,
-            'listings': self._listings(seller),
+            'listings': listings,
+            # The copy picker offers the same set as the list below it, so an
+            # admin copies something they can see.
+            'copy_choices': listings,
+            'copy_from': copy_from,
         }
 
     def get(self, request, seller_pk):
         seller = self._get_seller(seller_pk)
-        form = AuctionListingForm(seller=seller, initial=self._initial(seller))
-        return render(request, self.template_name, self._context(seller, form))
+        copy_from = self._copy_source(request, seller)
+        form = AuctionListingForm(
+            seller=seller, initial=self._initial(seller, copy_from)
+        )
+        if copy_from is not None:
+            messages.info(
+                request,
+                f'Copied the details from "{copy_from.title}". Set the dates '
+                'and save it as a new listing.',
+            )
+        return render(
+            request, self.template_name, self._context(seller, form, copy_from)
+        )
 
     def post(self, request, seller_pk):
         seller = self._get_seller(seller_pk)
