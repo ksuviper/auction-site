@@ -10,7 +10,7 @@ from django.shortcuts import render
 from django.views import View
 
 from .mixins import StaffRequiredMixin
-from .models import AuctionListing, Invoice
+from .models import Invoice
 from .utils import seller_display_name
 
 

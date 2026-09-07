@@ -34,6 +34,7 @@ from .models import (
     ProxyBid,
     UserProfile,
 )
+from .queries import sellers_in_category
 from .services import run_proxy_bids
 from .utils import _safe_send, has_active_subscription, payment_block
 
@@ -194,25 +195,30 @@ class ProfileUpdateView(LoginRequiredMixin, UpdateView):
 # ── Auction browsing views ────────────────────────────────────────────────────
 
 class CategoryListingView(ListView):
+    """
+    A category lists the *sellers* working in it, not their plants directly.
+
+    Browsing is category → seller → that seller's listings, so this page is a
+    directory of growers rather than a wall of individual plants: it is the
+    seller you are choosing at this point, and their page shows everything they
+    have open.
+
+    Sellers appear here by ``profile.seller_category``, not by the category on
+    each listing — a seller belongs to a category, an individual plant may not
+    match it, and their page shows all of their listings regardless.
+    """
+
     template_name = 'auctions/category.html'
-    context_object_name = 'listings'
+    context_object_name = 'sellers'
 
     def get_queryset(self):
         self.category = get_object_or_404(
             AuctionCategory, slug=self.kwargs['slug'], is_active=True
         )
-        now = timezone.now()
-        return (
-            AuctionListing.objects
-            .filter(
-                category=self.category,
-                is_active=True,
-                is_closed=False,
-                ends_at__gt=now,
-            )
-            .select_related('seller__profile', 'category')
-            .order_by('ends_at')
-        )
+        # Everyone assigned to this category, including anyone between
+        # listings: a featured seller with nothing open right now should still
+        # be findable, and the card says as much.
+        return sellers_in_category(self.category)
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)

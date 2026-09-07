@@ -23,6 +23,11 @@ seller record to create. Do this once, the first time someone sells with you:
 > money. The public seller page lists only *which* methods are accepted, not the
 > handles.
 
+**The category you pick here decides where buyers find this seller.** Category
+pages list the sellers assigned to them, and clicking a seller shows everything
+that seller has open — so a plant of theirs classed under a different category
+is still reachable through them, just not under that other category.
+
 They are then selectable in Step 1 from that moment on, every week, with no
 repeat setup. If nobody has been flagged yet, Step 1 says so and links you here
 rather than showing an empty dropdown.

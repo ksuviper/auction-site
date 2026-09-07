@@ -35,6 +35,8 @@ A "seller" is a user account with the seller flag ticked — see
 - Mandatory email verification plus Cloudflare Turnstile on email/password signup
 - Manual admin approval before a new account can log in, with approval/revocation
   actions in the admin (staff and superusers exempt)
+- Browsing by category → seller → their plants, with a seller directory on each
+  category page
 - Mobile-first Bootstrap 5 UI with offcanvas category sidebar
 
 ---
@@ -169,7 +171,7 @@ seller-specific detail now lives on `UserProfile`:
 | `seller_bio` | `Seller.bio` | Shown on their public page. |
 | `seller_shipping_fee` | `Seller.shipping_fee` | Their standard shipping charge, used by any of their listings that does not set its own. Nullable — no fee on file means free shipping. |
 | `seller_payment_methods` | `Seller.accepted_payment_methods` | **Other payment notes** — anything the named methods below do not cover (a postal address for cheques, "cash at pickup"). |
-| `seller_category` | — | The category they primarily list under. |
+| `seller_category` | — | The category they are listed under — this is what decides where buyers find them. See [How Browsing Works](#how-browsing-works). |
 | `seller_active_week` | `Seller.active_week` | Start date of the week they are featured. |
 | `seller_notify_on_comments` | `Seller.notify_on_comments` | Email them when a buyer asks a question. |
 
@@ -236,6 +238,56 @@ re-pointable — a non-null `seller` cannot be introduced while rows exist with 
 
 **Take a database backup before applying it.** Afterwards, flag the seller
 accounts as above and re-enter the current week's listings.
+
+---
+
+## How Browsing Works
+
+There is one path to a plant: **category → seller → that seller's listings.**
+There is no browse-everything page.
+
+- **A category page lists the sellers working in that category**, each with a
+  bio snippet and a count of what they have open. It does not show plants.
+- **A seller's page shows every listing they have open**, whatever category
+  each individual plant carries.
+
+### Sellers appear under their assigned category, not their listings'
+
+A seller belongs to a category via `profile.seller_category`. That is what the
+category page and the sidebar both group by.
+
+> **A listing's own `category` no longer affects where it can be found.** If a
+> seller assigned to *Spiders* lists a double, that plant appears on their
+> seller page — reachable through *Spiders* — and not under *Doubles*. The
+> listing's category is what reporting groups by.
+
+Before this, the sidebar was built from the categories on each seller's active
+listings while the category page listed plants directly. Those two could name
+different people for the same category. They now share one query.
+
+### The queries
+
+`auctions/queries.py` holds the read side, so a future browse-all page is a
+template and a URL rather than a rebuilt query:
+
+| Function | Returns |
+|---|---|
+| `active_listings(category=None, seller=None)` | Listings for sale now. With no arguments, everything on the site — what a browse-all page needs. `UserProfile.active_listings()` delegates here, so "for sale now" has one definition. |
+| `sellers_in_category(category, only_with_listings=False)` | Sellers assigned to a category, annotated with `active_listing_count`. |
+| `sellers_grouped_by_category(only_with_listings=False)` | `{category_id: [seller, …]}` in a single query, for the sidebar. |
+
+The category page lists **every** assigned seller, including anyone between
+listings — a featured seller with nothing open should still be findable, and
+their card says "Nothing open right now". The sidebar narrows to sellers with
+something open, since it is a "what's on now" shortcut and would otherwise grow
+a permanent entry for every seller who ever sold.
+
+Sellers with something open sort first, then alphabetically. Having *more*
+listings buys no advantage — a grower with nine plants is not more worth reading
+about than one with two — but both come before a grower with nothing to sell.
+
+`starts_at` is deliberately not filtered on: a listing becomes visible when an
+admin activates it, not when its start time arrives.
 
 ---
 

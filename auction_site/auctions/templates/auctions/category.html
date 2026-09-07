@@ -23,24 +23,71 @@
     </div>
   </aside>
 
-  <!-- Listings -->
+  {% comment %}
+    Sellers, not plants. Browsing is category → seller → their listings, so
+    what you pick here is a grower; their page shows everything they have open.
+  {% endcomment %}
   <main class="col-lg-9">
     <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-4">
       <h1 class="h2 fw-bold mb-0">{{ category.name }}</h1>
-      <span class="badge bg-secondary fs-6 px-3 py-2">{{ listings|length }} listing{{ listings|length|pluralize }}</span>
+      <span class="badge bg-secondary fs-6 px-3 py-2">
+        {{ sellers|length }} seller{{ sellers|length|pluralize }}
+      </span>
     </div>
 
-    {% if listings %}
-    <div class="row row-cols-1 row-cols-sm-2 row-cols-xl-3 g-4">
-      {% for listing in listings %}
-        {% include "auctions/_listing_card.html" %}
+    {% if sellers %}
+    <div class="row row-cols-1 row-cols-md-2 g-4">
+      {% for seller in sellers %}
+      <div class="col">
+        <div class="card h-100 border-0 shadow-sm">
+          <div class="card-body p-4 d-flex flex-column">
+            <div class="d-flex align-items-center gap-3 mb-3">
+              <div class="rounded-circle bg-success d-flex align-items-center justify-content-center flex-shrink-0"
+                   style="width:48px;height:48px;">
+                <i class="fas fa-store text-white"></i>
+              </div>
+              <div>
+                <h2 class="h5 fw-bold mb-0">
+                  <a href="{% url 'seller_listings' pk=seller.pk %}"
+                     class="text-decoration-none text-dark">
+                    {{ seller.profile.display_name }}
+                  </a>
+                </h2>
+                {% if seller.profile.seller_active_week %}
+                <span class="text-muted small">
+                  Week of {{ seller.profile.seller_active_week|date:"M j, Y" }}
+                </span>
+                {% endif %}
+              </div>
+            </div>
+
+            {% if seller.profile.seller_bio %}
+            <p class="mb-3">{{ seller.profile.seller_bio|truncatewords:28 }}</p>
+            {% endif %}
+
+            <div class="mt-auto d-flex align-items-center justify-content-between gap-2">
+              {% if seller.active_listing_count %}
+              <span class="badge bg-success-subtle text-success-emphasis fs-6 px-3 py-2">
+                {{ seller.active_listing_count }} open listing{{ seller.active_listing_count|pluralize }}
+              </span>
+              {% else %}
+              <span class="text-muted">Nothing open right now</span>
+              {% endif %}
+              <a href="{% url 'seller_listings' pk=seller.pk %}"
+                 class="btn btn-outline-primary">
+                View plants <i class="fas fa-arrow-right ms-1" aria-hidden="true"></i>
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
       {% endfor %}
     </div>
     {% else %}
     <div class="text-center py-5">
-      <i class="fas fa-seedling fa-4x text-muted mb-3 d-block"></i>
-      <h2 class="h4 text-muted">No active listings this week</h2>
-      <p class="text-muted fs-5">New listings are added weekly. Check back soon!</p>
+      <i class="fas fa-store-slash fa-4x text-muted mb-3 d-block"></i>
+      <h2 class="h4 text-muted">No sellers in this category right now</h2>
+      <p class="text-muted fs-5">Sellers are featured weekly. Check back soon!</p>
       <a href="{% url 'home' %}" class="btn btn-primary btn-lg mt-2">Back to Home</a>
     </div>
     {% endif %}

@@ -3,7 +3,6 @@ from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.utils import timezone
 from django.utils.text import slugify
 
 User = get_user_model()
@@ -188,20 +187,17 @@ class UserProfile(models.Model):
         """
         This seller's listings a visitor can currently act on.
 
-        Kept here rather than inline in a view because three places need exactly
-        this set — the public seller page, the category page's per-seller count,
-        and the seller's own dashboard — and a future "browse everything" page
-        would want it too.
+        Delegates to queries.active_listings so "currently for sale" has one
+        definition — the public seller page, the seller's own dashboard and the
+        category page's per-seller count all have to agree on it, and a future
+        browse-everything page uses the same query with no seller.
+
+        Imported here rather than at module scope because queries.py imports
+        this module.
         """
-        return (
-            self.user.listings.filter(
-                is_active=True,
-                is_closed=False,
-                ends_at__gt=timezone.now(),
-            )
-            .select_related('category')
-            .order_by('ends_at')
-        )
+        from .queries import active_listings
+
+        return active_listings(seller=self.user)
 
     def __str__(self) -> str:
         return f'Profile – {self.user.username}'
