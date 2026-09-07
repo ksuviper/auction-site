@@ -37,6 +37,7 @@ A "seller" is a user account with the seller flag ticked — see
   actions in the admin (staff and superusers exempt)
 - Browsing by category → seller → their plants, with a seller directory on each
   category page
+- Admin-managed FAQ, About Us, Terms of Service and Privacy Policy pages
 - Mobile-first Bootstrap 5 UI with offcanvas category sidebar
 
 ---
@@ -241,10 +242,57 @@ accounts as above and re-enter the current week's listings.
 
 ---
 
+## Admin-Managed Content
+
+Four pages are edited from the admin rather than in templates. All are under
+**Site Content** in the admin sidebar.
+
+| Page | URL | Edited in |
+|---|---|---|
+| About Us | `/about/` | **Site pages** → About Us |
+| Terms of Service | `/legal/terms-of-service/` | **Site pages** → Terms of Service |
+| Privacy Policy | `/legal/privacy-policy/` | **Site pages** → Privacy Policy |
+| FAQ | `/faq/` | **FAQ** (one row per question) |
+
+`SitePage` holds a slug, title and body; `FAQItem` holds a question, answer,
+`display_order` and `is_published`. Both are seeded or empty on a fresh install
+— migration `0020` creates the three pages.
+
+**Both bodies are rendered as HTML** (`|safe`), so an admin can write headings,
+lists and links. FAQ answers additionally get `linebreaksbr`, since an admin
+typing an answer will use plain line breaks rather than `<p>` tags.
+
+> Only staff can edit these, and staff already have full admin access, so this
+> is trusted input in the same sense the admin itself is. It does mean a
+> `SitePage` body is not somewhere to paste markup from an untrusted source. If
+> you would rather it were escaped, drop the `|safe` in
+> `auctions/templates/content/*.html` — headings and links in the seeded
+> Privacy Policy would then show as visible tags, so it would need rewriting as
+> plain text.
+
+### The Privacy Policy moved
+
+It used to be a static template. It is now a `SitePage`, **seeded with its real
+text rather than a placeholder** — it is a live legal page, and the Google and
+Facebook OAuth apps were pointed at it.
+
+`/privacy/` still resolves and now **redirects permanently** to
+`/legal/privacy-policy/`, so those OAuth configs and any existing links keep
+working. The URL name `privacy_policy` is unchanged. If an admin deletes the
+Privacy Policy page, `/privacy/` redirects to a 404 — so don't.
+
+`/privacy/data-deletion/` is deliberately **still a static template**: it
+documents a fixed procedure rather than prose the client would edit, and
+Facebook requires the URL to exist.
+
+---
+
 ## How Browsing Works
 
 There is one path to a plant: **category → seller → that seller's listings.**
-There is no browse-everything page.
+There is no browse-everything page, and the homepage no longer lists auctions
+either — it carries How It Works and an About Us excerpt, and the category
+sidebar beside them is the way in.
 
 - **A category page lists the sellers working in that category**, each with a
   bio snippet and a count of what they have open. It does not show plants.

@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}FAQ – ASQ Daylily Auctions{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-lg-8">
+
+    <h1 class="fw-bold mb-1">Frequently Asked Questions</h1>
+    <p class="text-muted fs-5 mb-4">
+      Can't find what you need? Email us at
+      <a href="mailto:asqdaylilies@gmail.com">asqdaylilies@gmail.com</a>.
+    </p>
+
+    {% if faqs %}
+    {% comment %}
+      Plain <details> rather than a Bootstrap accordion: it collapses without
+      JavaScript, is keyboard-operable and screen-reader-announced for free, and
+      the browser's own find-in-page can open a closed answer.
+    {% endcomment %}
+    <div class="card shadow-sm">
+      <div class="card-body p-2 p-md-3">
+        {% for faq in faqs %}
+        <details class="border-bottom py-3 px-2 faq-item">
+          <summary class="fw-semibold fs-5">{{ faq.question }}</summary>
+          <div class="mt-3 fs-5" style="line-height:1.7;">
+            {% comment %}
+              safe then linebreaksbr: an admin will normally type plain prose
+              with line breaks, and those need honouring, but HTML has to pass
+              through for the occasional link. linebreaksbr rather than
+              linebreaks because the latter wraps everything in <p>, which
+              nests invalidly around a list an admin did write as HTML.
+            {% endcomment %}
+            {{ faq.answer|safe|linebreaksbr }}
+          </div>
+        </details>
+        {% endfor %}
+      </div>
+    </div>
+    {% else %}
+    <div class="text-center py-5">
+      <i class="fas fa-circle-question fa-4x text-muted mb-3 d-block" aria-hidden="true"></i>
+      <h2 class="h4 text-muted">No questions posted yet</h2>
+      <p class="text-muted fs-5">Check back soon.</p>
+    </div>
+    {% endif %}
+
+    <a href="{% url 'home' %}" class="btn btn-outline-secondary mt-4">
+      <i class="fas fa-arrow-left me-2" aria-hidden="true"></i>Back to Home
+    </a>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  /* The default triangle marker is tiny; make the whole row read as clickable. */
+  .faq-item > summary { cursor: pointer; list-style-position: outside; }
+  .faq-item > summary:hover { color: var(--bs-primary); }
+  .faq-item:last-child { border-bottom: 0 !important; }
+</style>
+{% endblock %}

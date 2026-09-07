@@ -55,6 +55,12 @@
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'home' %}">Home</a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'about_us' %}">About Us</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'faq' %}">FAQ</a>
+                    </li>
                     {% block navbar_items %}
                     {% if request.user.is_authenticated %}
                     <li class="nav-item">
@@ -162,7 +168,10 @@
                     <ul class="list-unstyled">
                         <li><a href="{% url 'home' %}" class="text-white-50">Browse Auctions</a></li>
                         <li><a href="{% url 'account_login' %}" class="text-white-50">Log In / Sign Up</a></li>
-                        <li><a href="{% url 'privacy_policy' %}" class="text-white-50">Privacy Policy</a></li>
+                        <li><a href="{% url 'about_us' %}" class="text-white-50">About Us</a></li>
+                        <li><a href="{% url 'faq' %}" class="text-white-50">FAQ</a></li>
+                        <li><a href="{% url 'site_page' slug='terms-of-service' %}" class="text-white-50">Terms of Service</a></li>
+                        <li><a href="{% url 'site_page' slug='privacy-policy' %}" class="text-white-50">Privacy Policy</a></li>
                         <li><a href="{% url 'data_deletion' %}" class="text-white-50">Data Deletion</a></li>
                     </ul>
                 </div>

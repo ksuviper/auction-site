@@ -555,6 +555,84 @@ class Wishlist(models.Model):
         return f'{self.user.username} – "{self.listing_title_keyword}"'
 
 
+class FAQItem(models.Model):
+    """One question and answer on the public FAQ page, ordered by the admin."""
+
+    question = models.CharField(max_length=255)
+    answer = models.TextField(
+        help_text=(
+            'Plain text is fine — line breaks are kept as you type them. HTML '
+            'also works if you want a link.'
+        ),
+    )
+    display_order = models.PositiveIntegerField(
+        default=0,
+        help_text='Lower numbers appear first. Ties fall back to the question.',
+    )
+    is_published = models.BooleanField(
+        default=True,
+        help_text='Untick to keep this question off the public page.',
+    )
+
+    class Meta:
+        # question as the tiebreak so a page of rows all left at 0 comes out in
+        # a stable order rather than whatever the database happens to return.
+        ordering = ['display_order', 'question']
+        verbose_name = 'FAQ item'
+
+    def __str__(self) -> str:
+        return self.question
+
+
+class SitePage(models.Model):
+    """
+    An admin-editable page of prose: Terms of Service, Privacy Policy, About Us.
+
+    One model for all three rather than three models, because nothing about
+    them differs except the words — they are looked up by slug and rendered by
+    the same view. The rows are seeded by migration 0020; an admin edits them
+    but should not normally need to create or delete any.
+    """
+
+    slug = models.SlugField(
+        max_length=100,
+        unique=True,
+        help_text=(
+            'Appears in the page URL, e.g. "terms-of-service" is served at '
+            '/legal/terms-of-service/. Changing it changes the address, so '
+            'existing links to this page will break.'
+        ),
+    )
+    title = models.CharField(max_length=200)
+    body = models.TextField(
+        help_text=(
+            'HTML is allowed, so headings (<h2>), lists (<ul><li>) and links '
+            'work. Text with no markup keeps its line breaks.'
+        ),
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['title']
+
+    def get_absolute_url(self):
+        """
+        Where this page is served.
+
+        About Us has an address of its own; everything else lives under /legal/.
+        One method so the admin's "view on site" link, the nav and any template
+        all agree, including for a page an admin adds later.
+        """
+        from django.urls import reverse
+
+        if self.slug == 'about-us':
+            return reverse('about_us')
+        return reverse('site_page', kwargs={'slug': self.slug})
+
+    def __str__(self) -> str:
+        return self.title
+
+
 class Subscription(models.Model):
     PLAN_CHOICES = [
         ('monthly', 'Monthly'),

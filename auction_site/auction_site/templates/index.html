@@ -54,38 +54,19 @@
       </p>
     </div>
 
-    <!-- Listings heading -->
-    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-4">
-      <h2 class="h4 fw-bold mb-0">
-        <i class="fas fa-gavel me-2 text-muted" aria-hidden="true"></i>Active Auctions
-      </h2>
-      {% if listings %}
-      <span class="badge bg-secondary fs-6 px-3 py-2">
-        {{ listings|length }} listing{{ listings|length|pluralize }}
-      </span>
-      {% endif %}
-    </div>
+    {% comment %}
+      Active Auctions used to fill this space. Browsing is category → seller →
+      that seller's plants now, and the sidebar beside this is the way in, so a
+      second wall of listings here was a competing entry point to the same
+      thing. What replaces it explains the place to someone who has just
+      arrived.
 
-    {% if listings %}
-    <div class="row row-cols-1 row-cols-sm-2 row-cols-xl-3 g-4">
-      {% for listing in listings %}
-        {% include "auctions/_listing_card.html" %}
-      {% endfor %}
-    </div>
-
-    {% else %}
-    <!-- Empty state -->
-    <div class="text-center py-5">
-      <i class="fas fa-seedling fa-4x text-muted mb-3 d-block" aria-hidden="true"></i>
-      <h2 class="h4 text-muted">No active auctions right now</h2>
-      <p class="text-muted fs-5">
-        Auctions run weekly. Check back soon for new listings from our sellers!
-      </p>
-    </div>
-    {% endif %}
+      The How It Works copy below is the original wording, moved rather than
+      rewritten.
+    {% endcomment %}
 
     <!-- How It Works -->
-    <section class="row g-4 mt-5 pt-4 border-top" aria-labelledby="how-it-works-heading">
+    <section class="row g-4 mb-5" aria-labelledby="how-it-works-heading">
       <div class="col-12">
         <h2 class="h4 fw-bold text-center mb-4" id="how-it-works-heading">How It Works</h2>
       </div>
@@ -105,6 +86,27 @@
         <p class="fs-5">Pay the seller directly using their preferred payment method.</p>
       </div>
     </section>
+
+    {% comment %}
+      About Us is pulled from the SitePage the admin edits, so this section and
+      /about/ cannot drift apart. Truncated, because that page is allowed to
+      grow long and this is a homepage introduction.
+    {% endcomment %}
+    {% if about_page %}
+    <section class="pt-4 border-top" aria-labelledby="about-us-heading">
+      <h2 class="h4 fw-bold text-center mb-4" id="about-us-heading">About Us</h2>
+      <div class="fs-5 mx-auto" style="max-width:52rem; line-height:1.8;">
+        {{ about_excerpt|safe }}
+      </div>
+      {% if about_truncated %}
+      <div class="text-center mt-4">
+        <a href="{% url 'about_us' %}" class="btn btn-outline-primary btn-lg">
+          Read more about us <i class="fas fa-arrow-right ms-1" aria-hidden="true"></i>
+        </a>
+      </div>
+      {% endif %}
+    </section>
+    {% endif %}
 
   </section>
 </div>

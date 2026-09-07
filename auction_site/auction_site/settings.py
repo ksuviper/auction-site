@@ -353,6 +353,23 @@ UNFOLD = {
                 ],
             },
             {
+                "title": "Site Content",
+                "separator": True,
+                "collapsible": False,
+                "items": [
+                    {
+                        "title": "Pages",
+                        "icon": "description",
+                        "link": reverse_lazy("admin:auctions_sitepage_changelist"),
+                    },
+                    {
+                        "title": "FAQ",
+                        "icon": "quiz",
+                        "link": reverse_lazy("admin:auctions_faqitem_changelist"),
+                    },
+                ],
+            },
+            {
                 "title": "Users",
                 "separator": True,
                 "collapsible": False,

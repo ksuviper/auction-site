@@ -5,6 +5,7 @@ from .views import (
     AccountPendingApprovalView,
     BuyNowView,
     CategoryListingView,
+    FAQView,
     ListingDetailView,
     PlaceBidView,
     PlaceProxyBidView,
@@ -14,10 +15,15 @@ from .views import (
     SecuritySettingsView,
     SellerDashboardView,
     SellerListingView,
+    SitePageView,
     ToggleEmailLoginCodeView,
 )
 
 urlpatterns = [
+    # ── Admin-managed content pages ──────────────────────────────────────────
+    path('faq/', FAQView.as_view(), name='faq'),
+    path('about/', SitePageView.as_view(), {'slug': 'about-us'}, name='about_us'),
+    path('legal/<slug:slug>/', SitePageView.as_view(), name='site_page'),
     path(
         'accounts/pending-approval/',
         AccountPendingApprovalView.as_view(),

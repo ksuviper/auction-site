@@ -29,9 +29,11 @@ from .models import (
     AuctionCategory,
     AuctionListing,
     Bid,
+    FAQItem,
     Invoice,
     ListingComment,
     ProxyBid,
+    SitePage,
     UserProfile,
 )
 from .queries import sellers_in_category
@@ -190,6 +192,40 @@ class ProfileUpdateView(LoginRequiredMixin, UpdateView):
     def get_success_url(self):
         next_url = self.request.POST.get('next', '').strip()
         return next_url if next_url else reverse_lazy('profile')
+
+
+# ── Admin-managed content pages ───────────────────────────────────────────────
+
+class FAQView(ListView):
+    """The public FAQ. Content and order are entirely admin-managed."""
+
+    model = FAQItem
+    template_name = 'content/faq.html'
+    context_object_name = 'faqs'
+
+    def get_queryset(self):
+        return FAQItem.objects.filter(is_published=True)
+
+
+class SitePageView(DetailView):
+    """
+    Renders one admin-editable page of prose by slug.
+
+    ``slug`` comes from the URL for /legal/<slug>/, or is supplied by the
+    URLconf for a page with a friendlier address of its own — see about_us.
+    """
+
+    model = SitePage
+    template_name = 'content/site_page.html'
+    context_object_name = 'page'
+
+    def get(self, request, *args, **kwargs):
+        # About Us has its own /about/ address, which is the one advertised in
+        # the nav and footer. Redirecting keeps a single canonical URL rather
+        # than serving the same page at two.
+        if kwargs.get('slug') == 'about-us' and request.path != reverse('about_us'):
+            return redirect('about_us', permanent=True)
+        return super().get(request, *args, **kwargs)
 
 
 # ── Auction browsing views ────────────────────────────────────────────────────

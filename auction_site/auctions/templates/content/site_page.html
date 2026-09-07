@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% comment %}
+  body is rendered with |safe so an admin can use headings, lists and links.
+  Only staff can edit a SitePage, and staff already have full admin access, so
+  this is trusted input in the same sense the admin itself is — but it does mean
+  a SitePage body is not a place to paste markup from anywhere else.
+{% endcomment %}
+
+{% block title %}{{ page.title }} – ASQ Daylily Auctions{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-lg-8">
+
+    <h1 class="fw-bold mb-1">{{ page.title }}</h1>
+
+    <div class="card shadow-sm mb-4 mt-3">
+      <div class="card-body p-4 fs-5" style="line-height:1.8;">
+        {{ page.body|safe }}
+      </div>
+    </div>
+
+    <a href="{% url 'home' %}" class="btn btn-outline-secondary">
+      <i class="fas fa-arrow-left me-2" aria-hidden="true"></i>Back to Home
+    </a>
+
+  </div>
+</div>
+{% endblock %}

@@ -16,9 +16,11 @@ from .models import (
     AuctionCategory,
     AuctionListing,
     Bid,
+    FAQItem,
     Invoice,
     ListingComment,
     ProxyBid,
+    SitePage,
     Subscription,
     UserProfile,
     Wishlist,
@@ -463,6 +465,33 @@ class InvoiceAdmin(ModelAdmin):
     )
     raw_id_fields = ('listing', 'buyer', 'seller')
     date_hierarchy = 'created_at'
+
+
+# ── Admin-managed content pages ──────────────────────────────────────────────
+
+@admin.register(FAQItem)
+class FAQItemAdmin(ModelAdmin):
+    list_display = ('question', 'display_order', 'is_published')
+    list_editable = ('display_order', 'is_published')
+    list_filter = ('is_published',)
+    search_fields = ('question', 'answer')
+    # Model Meta already orders by display_order; repeated here because
+    # list_editable on an ordering field is confusing without it being visible.
+    ordering = ('display_order', 'question')
+
+
+@admin.register(SitePage)
+class SitePageAdmin(ModelAdmin):
+    list_display = ('title', 'slug', 'updated_at', 'view_on_site_link')
+    search_fields = ('title', 'slug', 'body')
+    readonly_fields = ('updated_at',)
+    prepopulated_fields = {'slug': ('title',)}
+
+    @admin.display(description='Public page')
+    def view_on_site_link(self, obj):
+        """A direct link, since the address depends on the slug."""
+        url = obj.get_absolute_url()
+        return mark_safe(f'<a href="{url}" target="_blank">{url}</a>')
 
 
 @admin.register(Wishlist)

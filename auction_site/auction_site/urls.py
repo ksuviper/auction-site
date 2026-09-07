@@ -28,7 +28,18 @@ from . import views
 urlpatterns = [
     path('', views.index, name='home'),
     path('robots.txt', TemplateView.as_view(template_name='robots.txt', content_type='text/plain')),
-    path('privacy/', TemplateView.as_view(template_name='legal/privacy_policy.html'), name='privacy_policy'),
+    # The privacy policy is admin-editable now (a SitePage at
+    # /legal/privacy-policy/, seeded by migration 0020 with the text that used
+    # to live in legal/privacy_policy.html). This keeps the old address and URL
+    # name working: it is what the Google and Facebook OAuth apps were given,
+    # and what any existing link points at.
+    path(
+        'privacy/',
+        RedirectView.as_view(url='/legal/privacy-policy/', permanent=True),
+        name='privacy_policy',
+    ),
+    # Data deletion stays a static page. It documents a specific procedure
+    # rather than prose the client would edit, and Facebook requires the URL.
     path('privacy/data-deletion/', TemplateView.as_view(template_name='legal/data_deletion.html'), name='data_deletion'),
     path('favicon.ico', RedirectView.as_view(url=settings.STATIC_URL + 'favicon.ico', permanent=True)),
     path('admin/invoices/', include('auctions.invoice_urls')),
