@@ -18,8 +18,8 @@ from auctions.models import (
     AuctionCategory,
     AuctionListing,
     Invoice,
-    Seller,
 )
+from auctions.tests.utils import make_seller
 
 User = get_user_model()
 
@@ -32,11 +32,7 @@ class ReportQuantityTests(TestCase):
         self.client.force_login(self.staff)
 
         self.category = AuctionCategory.objects.create(name='Daylilies')
-        self.seller = Seller.objects.create(
-            name='Report Seller',
-            accepted_payment_methods='PayPal',
-            shipping_fee='5.00',
-        )
+        self.seller = make_seller('reportseller', first_name='Report', last_name='Seller')
         self.buyer = User.objects.create_user('rbuyer', 'rbuyer@example.com', 'pw')
 
     def _listing(self, listing_type='buy_now', quantity=10):

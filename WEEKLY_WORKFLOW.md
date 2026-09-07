@@ -5,17 +5,35 @@ admin action is only needed at the start (setup) and end (invoices).
 
 ---
 
-## Step 1 — Create or select the seller
+## Step 0 (once per seller) — Flag their account as a seller
+
+A seller is a **user account** with the seller flag ticked; there is no separate
+seller record to create. Do this once, the first time someone sells with you:
+
+1. In the Django admin, go to **Users → Users** and open their account.
+2. On their profile, tick **Is seller**.
+3. Fill in their **standard shipping fee**, **payment methods** (e.g.
+   `PayPal, Venmo, Zelle`), category and the week they are featured.
+
+They are then selectable in Step 1 from that moment on, every week, with no
+repeat setup. If nobody has been flagged yet, Step 1 says so and links you here
+rather than showing an empty dropdown.
+
+> Sellers can see what is listed under their name and what has sold, at
+> **Seller Dashboard** in their own navigation. It is read-only — they cannot
+> add or edit listings, so Steps 1 and 2 are still an admin job.
+
+---
+
+## Step 1 — Select the seller
 
 **Where:** `/admin/weekly-setup/`  (navbar: *Weekly Setup*)
 
-1. Choose **"Create a new seller"** or **"Use an existing seller"**.
-2. If new: fill in name, accepted payment methods, shipping fee, and the week's
-   start date. (Category is set per listing in Step 2, not on the seller.)
-3. Click **Continue to Listings**.
+1. Pick the seller from the dropdown.
+2. Click **Continue to Listings**.
 
-> **Tip:** If the same seller participates again in a future week, pick them from
-> the "existing seller" list and the system will reuse their profile unchanged.
+Their shipping fee and payment details come along automatically, so a returning
+seller needs nothing re-entered.
 
 ---
 
@@ -38,7 +56,7 @@ entries.
 | Reserve price | Auction only, optional: the listing will not sell below this |
 | Price each | Buy It Now only |
 | How many | Buy It Now only: units for sale. Several buyers can each take some. |
-| Shipping cost | Buy It Now only: what the buyer pays to ship this plant. Starts at the seller's standard fee; change it for a plant that ships differently. Leave blank to always follow the seller's fee. |
+| Shipping cost | Buy It Now only: what the buyer pays to ship this plant. Starts at the seller's standard fee (from Step 0); change it for a plant that ships differently. Leave blank to always follow the seller's fee. |
 | Charged how? | Buy It Now only: the shipping cost once per order (flat), or multiplied by the quantity bought (per item) |
 | Starts / Ends | Date + time bidding opens and closes |
 

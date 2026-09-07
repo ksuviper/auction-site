@@ -22,8 +22,8 @@
       </a>
     </div>
     <p class="text-muted fs-5 mb-4">
-      Seller: <strong>{{ seller.name }}</strong>
-      {% if seller.active_week %}&nbsp;·&nbsp; Week of <strong>{{ seller.active_week }}</strong>{% endif %}
+      Seller: <strong>{{ seller.profile.display_name }}</strong>
+      {% if seller.profile.seller_active_week %}&nbsp;·&nbsp; Week of <strong>{{ seller.profile.seller_active_week }}</strong>{% endif %}
     </p>
 
     <!-- ── Creation form — the point of the page ─────────────────────────── -->
@@ -201,7 +201,7 @@
     two places to change the same thing. The one link per row opens the admin.
     {% endcomment %}
     <section id="existing-listings">
-      <h2 class="h4 mb-1">Listings for {{ seller.name }}</h2>
+      <h2 class="h4 mb-1">Listings for {{ seller.profile.display_name }}</h2>
       <p class="text-muted mb-3">
         {{ listings|length }} so far, newest first. To change or remove one, open
         it in the admin.

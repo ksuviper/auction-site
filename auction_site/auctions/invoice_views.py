@@ -5,7 +5,7 @@ from django.views import View
 
 from .invoice_forms import InvoiceCreateForm, InvoiceEditForm
 from .mixins import StaffRequiredMixin
-from .models import Invoice, Seller
+from .models import Invoice
 
 
 class InvoiceDashboardView(StaffRequiredMixin, View):
@@ -14,8 +14,8 @@ class InvoiceDashboardView(StaffRequiredMixin, View):
     def get(self, request):
         invoices = (
             Invoice.objects
-            .select_related('listing', 'buyer', 'seller')
-            .order_by('seller__name', '-created_at')
+            .select_related('listing', 'buyer', 'seller__profile')
+            .order_by('seller__username', '-created_at')
         )
 
         # Group by seller
@@ -91,7 +91,7 @@ class InvoiceDetailView(View):
 
     def get(self, request, pk):
         invoice = get_object_or_404(
-            Invoice.objects.select_related('listing', 'buyer', 'seller'),
+            Invoice.objects.select_related('listing', 'buyer', 'seller__profile'),
             pk=pk,
         )
         is_owner = request.user.is_authenticated and invoice.buyer == request.user

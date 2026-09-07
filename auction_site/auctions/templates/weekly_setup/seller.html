@@ -16,10 +16,12 @@
     </div>
 
     <h2 class="mb-1">Weekly Setup</h2>
-    <p class="text-muted mb-4">Step 1 of 3 — Set up the seller for this week's auction.</p>
+    <p class="text-muted mb-4">Step 1 of 3 — Choose whose plants you are listing.</p>
 
     <div class="card shadow-sm">
       <div class="card-body p-4">
+
+        {% if has_sellers %}
         <form method="post">
           {% csrf_token %}
 
@@ -27,63 +29,15 @@
             <div class="alert alert-danger">{{ form.non_field_errors }}</div>
           {% endif %}
 
-          <!-- Mode selector -->
-          <div class="mb-4">
-            <label class="form-label fw-semibold">Seller type</label>
-            <div class="d-flex gap-4">
-              {% for radio in form.seller_mode %}
-              <div class="form-check">
-                {{ radio.tag }}
-                <label class="form-check-label" for="{{ radio.id_for_label }}">{{ radio.choice_label }}</label>
-              </div>
-              {% endfor %}
-            </div>
-          </div>
-
-          <!-- Existing seller selector -->
-          <div id="existing-seller-section">
-            <div class="mb-3">
-              <label for="{{ form.existing_seller.id_for_label }}" class="form-label fw-semibold">
-                Existing seller
-              </label>
-              <select name="{{ form.existing_seller.html_name }}"
-                      id="{{ form.existing_seller.id_for_label }}"
-                      class="form-select{% if form.existing_seller.errors %} is-invalid{% endif %}">
-                <option value="">— select —</option>
-                {% for seller in form.existing_seller.field.queryset %}
-                <option value="{{ seller.pk }}"
-                  {% if form.existing_seller.value == seller.pk|stringformat:"s" %}selected{% endif %}>
-                  {{ seller.name }} ({{ seller.active_week }})
-                </option>
-                {% endfor %}
-              </select>
-              {% if form.existing_seller.errors %}
-                <div class="invalid-feedback">{{ form.existing_seller.errors|join:", " }}</div>
-              {% endif %}
-            </div>
-          </div>
-
-          <!-- New seller fields -->
-          <div id="new-seller-section">
-            <hr class="my-3">
-            <h6 class="text-uppercase text-muted small fw-bold mb-3">Seller details</h6>
-
-            {% for field in form %}
-              {% if field.name not in "seller_mode,existing_seller" %}
-              <div class="mb-3">
-                <label for="{{ field.id_for_label }}" class="form-label fw-semibold">
-                  {{ field.label }}
-                </label>
-                {{ field }}
-                {% if field.errors %}
-                  <div class="invalid-feedback d-block">{{ field.errors|join:", " }}</div>
-                {% endif %}
-                {% if field.help_text %}
-                  <div class="form-text">{{ field.help_text }}</div>
-                {% endif %}
-              </div>
-              {% endif %}
-            {% endfor %}
+          <div class="mb-3">
+            <label for="{{ form.seller.id_for_label }}" class="form-label fw-semibold fs-5">
+              {{ form.seller.label }}
+            </label>
+            {{ form.seller }}
+            {% if form.seller.errors %}
+              <div class="invalid-feedback d-block">{{ form.seller.errors|join:", " }}</div>
+            {% endif %}
+            <div class="form-text fs-6">{{ form.seller.help_text }}</div>
           </div>
 
           <div class="mt-4">
@@ -92,41 +46,28 @@
             </button>
           </div>
         </form>
+
+        {% else %}
+        {# A seller is a user account with the seller flag ticked, so there is
+           nothing to create here — the fix is in the admin, and saying so
+           beats an empty dropdown that looks broken. #}
+        <div class="text-center py-3">
+          <i class="fas fa-store-slash fa-2x text-muted mb-3" aria-hidden="true"></i>
+          <h3 class="h4">No sellers found</h3>
+          <p class="fs-5 text-muted mb-4">
+            Flag a user account as a seller in the admin before adding listings.
+            Open the account, tick <strong>Is seller</strong> on their profile,
+            and fill in their shipping fee and payment details.
+          </p>
+          <a href="{% url 'admin:auth_user_changelist' %}" class="btn btn-primary btn-lg">
+            <i class="fas fa-users me-1" aria-hidden="true"></i>Manage user accounts
+          </a>
+        </div>
+        {% endif %}
+
       </div>
     </div>
 
   </div>
 </div>
-{% endblock %}
-
-{% block extra_css %}
-<style>
-  input[type="text"], input[type="email"], input[type="number"],
-  input[type="date"], textarea, select {
-    display: block; width: 100%; padding: .375rem .75rem;
-    font-size: 1rem; border: 1px solid #dee2e6; border-radius: .375rem;
-  }
-  input[type="radio"] { width: auto; }
-</style>
-{% endblock %}
-
-{% block extra_js %}
-<script>
-(function () {
-  var radios = document.querySelectorAll('[name="seller_mode"]');
-  var existingSection = document.getElementById('existing-seller-section');
-  var newSection = document.getElementById('new-seller-section');
-
-  function update() {
-    var mode = document.querySelector('[name="seller_mode"]:checked');
-    if (!mode) return;
-    var isNew = mode.value === 'new';
-    existingSection.style.display = isNew ? 'none' : '';
-    newSection.style.display = isNew ? '' : 'none';
-  }
-
-  radios.forEach(function(r) { r.addEventListener('change', update); });
-  update();
-})();
-</script>
 {% endblock %}

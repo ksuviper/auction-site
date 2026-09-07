@@ -6,10 +6,61 @@ should not each re-implement that, and should not sidestep it either — the poi
 of asserting "this user can log in" is that they reach an authenticated session.
 """
 
+from django.contrib.auth import get_user_model
 from django.core import mail
+
+User = get_user_model()
 
 LOGIN_URL = '/accounts/login/'
 LOGIN_CODE_URL = '/accounts/login/code/confirm/'
+
+
+def make_seller(
+    username='seller',
+    *,
+    email='',
+    first_name='',
+    last_name='',
+    shipping_fee='5.00',
+    payment_methods='PayPal',
+    category=None,
+    active_week=None,
+    notify_on_comments=True,
+    **user_kwargs,
+):
+    """
+    Create a seller: a User account with profile.is_seller ticked.
+
+    There is no Seller model any more, so every test that needs "a seller" needs
+    these two objects in step. Centralised here so a later profile field does
+    not have to be threaded through a dozen setUp methods.
+
+    The profile is updated with .update() rather than .save() so the approval
+    email signal stays quiet — several suites assert on exactly which mail a
+    flow produces.
+    """
+    from auctions.models import UserProfile
+
+    user = User.objects.create_user(
+        username=username,
+        email=email or f'{username}@example.com',
+        first_name=first_name,
+        last_name=last_name,
+        **user_kwargs,
+    )
+    UserProfile.objects.filter(user=user).update(
+        is_approved=True,
+        is_seller=True,
+        seller_shipping_fee=shipping_fee,
+        seller_payment_methods=payment_methods,
+        seller_category=category,
+        seller_active_week=active_week,
+        seller_notify_on_comments=notify_on_comments,
+    )
+    # setUp code reads user.profile straight after this, and the reverse
+    # one-to-one is cached from before the update above.
+    user.refresh_from_db()
+    return user
 
 
 def extract_login_code():

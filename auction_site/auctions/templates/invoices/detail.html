@@ -54,7 +54,7 @@
                     </div>
                     <div class="col-sm-6">
                         <h6 class="text-uppercase text-muted small fw-bold">Seller</h6>
-                        <p class="mb-0 fw-semibold">{{ invoice.seller.name }}</p>
+                        <p class="mb-0 fw-semibold">{{ invoice.seller.profile.display_name }}</p>
                         {% if invoice.seller.email %}
                             <p class="mb-0 small text-muted">{{ invoice.seller.email }}</p>
                         {% endif %}
@@ -86,14 +86,14 @@
                     </tfoot>
                 </table>
 
-                {% if invoice.payment_method or invoice.seller.accepted_payment_methods %}
+                {% if invoice.payment_method or invoice.seller.profile.seller_payment_methods %}
                 <div class="mb-4">
                     <h6 class="text-uppercase text-muted small fw-bold">Payment</h6>
                     {% if invoice.payment_method %}
                         <p class="mb-0">Method: <strong>{{ invoice.payment_method }}</strong></p>
                     {% else %}
                         <p class="mb-0 text-muted">
-                            Accepted: {{ invoice.seller.accepted_payment_methods }}
+                            Accepted: {{ invoice.seller.profile.seller_payment_methods }}
                         </p>
                     {% endif %}
                 </div>

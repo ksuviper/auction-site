@@ -14,7 +14,9 @@ def index(request):
     listings = (
         AuctionListing.objects
         .filter(is_active=True, is_closed=False, ends_at__gt=now)
-        .select_related('category', 'seller')
+        # seller__profile: the listing cards show the seller's display name,
+        # which is assembled from their profile.
+        .select_related('category', 'seller__profile')
         .order_by('ends_at')
     )
     return render(request, 'index.html', {'listings': listings})

@@ -4,12 +4,16 @@ A Django-based online auction platform for the Above Status Quo Daylily Auction 
 Sellers are featured on a rotating weekly schedule; bidders browse by category, place bids,
 and receive automated invoices when auctions close.
 
+A "seller" is a user account with the seller flag ticked — see
+[Sellers Are User Accounts](#sellers-are-user-accounts).
+
 ---
 
 ## Features
 
 - Weekly auction rotation, with listings added one at a time through a guided
   setup flow
+- Sellers are user accounts, with a read-only sales dashboard of their own
 - Automatic auction closing, winner assignment, and invoice generation (APScheduler)
 - Paid memberships via PayPal subscriptions, gating bidding and purchasing (US residents only)
 - Buy It Now listings alongside standard auctions, with per-listing stock so
@@ -148,6 +152,64 @@ Visit `http://localhost:8000`. Log in at `/admin/` with your superuser credentia
 
 ---
 
+## Sellers Are User Accounts
+
+**A seller is a `User` whose `profile.is_seller` is ticked.** There is no
+`Seller` model any more — it was removed in migration `0018`, and every
+seller-specific detail now lives on `UserProfile`:
+
+| Field | Was | Meaning |
+|---|---|---|
+| `is_seller` | — | Ticking this is the whole of "make someone a seller". |
+| `seller_bio` | `Seller.bio` | Shown on their public page. |
+| `seller_shipping_fee` | `Seller.shipping_fee` | Their standard shipping charge, used by any of their listings that does not set its own. Nullable — no fee on file means free shipping. |
+| `seller_payment_methods` | `Seller.accepted_payment_methods` | Free text, e.g. `PayPal, Venmo, Zelle`. |
+| `seller_category` | — | The category they primarily list under. |
+| `seller_active_week` | `Seller.active_week` | Start date of the week they are featured. |
+| `seller_notify_on_comments` | `Seller.notify_on_comments` | Email them when a buyer asks a question. |
+
+A seller's name is no longer a field: `UserProfile.display_name` assembles it
+from the account (full name, falling back to the username), and
+`auctions.utils.seller_display_name(user)` is the same thing for Python that
+tolerates a missing profile row. Nothing should format a seller's name by hand.
+
+`AuctionListing.seller` and `Invoice.seller` are now non-null
+`PROTECT` foreign keys to `User`, limited to `profile__is_seller=True`. Non-null
+because a listing with no seller has nobody to pay and no shipping fee to quote;
+`PROTECT` because deleting an account that has sold plants would orphan the
+invoices that record it.
+
+### Making someone a seller
+
+In the admin, open the user (**Users → Users**, or **Auctions → Sellers** for
+the profiles already flagged), tick **Is seller**, and fill in the shipping fee
+and payment details. They become selectable on the Add Listing page immediately.
+
+**Sellers do not create or edit their own listings** — an admin does, through
+Add Listing. What sellers get instead is a read-only dashboard at
+`/seller/dashboard/`, linked from the main navigation when their account is
+flagged: what is currently listed under their name, what has sold, to whom, and
+their totals. It is deliberately free of forms and edit links; a correction is a
+conversation with an admin.
+
+### Upgrading an existing site
+
+> **Migration `0018` deletes data.** Every listing, bid, proxy bid, listing
+> comment and invoice is deleted, along with the `Seller` table. User accounts,
+> categories, subscriptions and wishlists survive untouched.
+
+This was a deliberate call, not an accident of the migration: a free-text
+`Seller.name` cannot be mapped to a user account automatically, and inventing
+accounts to keep the rows would produce logins that the email-verification and
+approval gates then block. Deleting the rows is also what makes the columns
+re-pointable — a non-null `seller` cannot be introduced while rows exist with no
+`User` to point at.
+
+**Take a database backup before applying it.** Afterwards, flag the seller
+accounts as above and re-enter the current week's listings.
+
+---
+
 ## Buy It Now Stock
 
 A Buy It Now listing carries a quantity, and **several buyers can each purchase
@@ -162,7 +224,7 @@ sell one lot to one `winner`.
 | `shipping_fee` | What shipping costs for this listing. Blank falls back to the seller's standard fee, so plants that ship differently can be priced individually. `listing.shipping_rate` resolves the two. |
 | `Invoice.quantity` | Units on that invoice. One invoice per purchase, so one listing can have several. `Invoice.amount` is the line total (unit price × quantity), not the unit price. |
 
-Sellers set the quantity, shipping cost and shipping mode on the **Weekly
+An admin sets the quantity, shipping cost and shipping mode on the **Weekly
 Setup** add-listing form; those inputs appear only when the listing type is Buy
 It Now. The shipping cost box starts at the seller's standard fee, so it always
 shows what the buyer would pay and an override is a deliberate edit. Duplicating a listing in

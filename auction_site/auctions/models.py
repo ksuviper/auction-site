@@ -3,6 +3,7 @@ from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils import timezone
 from django.utils.text import slugify
 
 User = get_user_model()
@@ -54,35 +55,90 @@ class UserProfile(models.Model):
         ),
     )
 
-    def __str__(self) -> str:
-        return f'Profile – {self.user.username}'
-
-
-class Seller(models.Model):
-    name = models.CharField(max_length=200)
-    email = models.EmailField(
-        blank=True,
-        help_text='Email address for auction-end notifications',
+    # ── Seller fields ────────────────────────────────────────────────────────
+    # A seller is a User account with is_seller ticked; there is no separate
+    # Seller record any more. Everything below is meaningless unless is_seller
+    # is True, and is prefixed so it reads that way at every call site.
+    #
+    # Sellers do not create their own listings — an admin does, through Add
+    # Listing — so these are admin-maintained details about the person whose
+    # plants are being sold, not a self-service profile.
+    is_seller = models.BooleanField(
+        default=False,
+        help_text=(
+            'This account sells plants. Seller-flagged users can be chosen when '
+            'adding a listing, appear on the public category and seller pages, '
+            'and get a read-only sales dashboard.'
+        ),
     )
-    notify_on_comments = models.BooleanField(
+    seller_bio = models.TextField(
+        blank=True,
+        help_text='Shown on this seller\'s public page.',
+    )
+    # max_digits=7 rather than the 6 originally sketched, to match the other two
+    # shipping columns in this schema (AuctionListing.shipping_fee and
+    # Invoice.shipping_fee) so a value can move between them unchanged.
+    seller_shipping_fee = models.DecimalField(
+        max_digits=7, decimal_places=2, null=True, blank=True,
+        help_text=(
+            "This seller's standard shipping charge. Used for any of their "
+            'listings that does not set its own.'
+        ),
+    )
+    seller_payment_methods = models.TextField(
+        blank=True,
+        help_text='e.g. PayPal, Venmo, Zelle',
+    )
+    seller_category = models.ForeignKey(
+        AuctionCategory,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='sellers',
+        help_text='The category this seller primarily lists under.',
+    )
+    seller_active_week = models.DateField(
+        null=True, blank=True,
+        help_text='Start date of the week this seller is active.',
+    )
+    seller_notify_on_comments = models.BooleanField(
         default=True,
         help_text='Email this seller when a buyer posts a question on their listing.',
     )
-    bio = models.TextField(blank=True)
-    accepted_payment_methods = models.TextField(
-        help_text='e.g. PayPal, Venmo, Zelle'
-    )
-    shipping_fee = models.DecimalField(max_digits=7, decimal_places=2)
-    active_week = models.DateField(
-        null=True, blank=True,
-        help_text='Start date of the week this seller is active',
-    )
 
-    class Meta:
-        ordering = ['-active_week', 'name']
+    @property
+    def display_name(self) -> str:
+        """
+        What to call this person on screen.
+
+        The old Seller model carried a free-text ``name``; a User does not, so
+        this is the one place that decides how a name is assembled. Full name
+        when we have one, otherwise the username — allauth derives that from the
+        email address at signup, so it is at least recognisable.
+        """
+        return self.user.get_full_name().strip() or self.user.get_username()
+
+    def active_listings(self):
+        """
+        This seller's listings a visitor can currently act on.
+
+        Kept here rather than inline in a view because three places need exactly
+        this set — the public seller page, the category page's per-seller count,
+        and the seller's own dashboard — and a future "browse everything" page
+        would want it too.
+        """
+        return (
+            self.user.listings.filter(
+                is_active=True,
+                is_closed=False,
+                ends_at__gt=timezone.now(),
+            )
+            .select_related('category')
+            .order_by('ends_at')
+        )
 
     def __str__(self) -> str:
-        return f'{self.name} ({self.active_week})'
+        return f'Profile – {self.user.username}'
 
 
 class AuctionListing(models.Model):
@@ -102,11 +158,13 @@ class AuctionListing(models.Model):
         on_delete=models.PROTECT,
         related_name='listings',
     )
+    # PROTECT and non-null: a listing with no seller has nobody to pay and no
+    # shipping fee to quote, which the old nullable column made representable
+    # and every reader then had to guard against.
     seller = models.ForeignKey(
-        Seller,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
+        User,
+        on_delete=models.PROTECT,
+        limit_choices_to={'profile__is_seller': True},
         related_name='listings',
     )
     description = models.TextField(blank=True)
@@ -236,10 +294,9 @@ class AuctionListing(models.Model):
         """
         if self.shipping_fee is not None:
             base = self.shipping_fee
-        elif self.seller:
-            base = self.seller.shipping_fee
         else:
-            base = 0
+            profile = getattr(self.seller, 'profile', None)
+            base = getattr(profile, 'seller_shipping_fee', None) or 0
         # Coerced because callers (and this project's own fixtures) sometimes
         # assign decimal fields as strings; '5.00' * 3 would silently produce
         # '5.005.005.00' rather than 15.00.
@@ -319,10 +376,13 @@ class Invoice(models.Model):
         on_delete=models.PROTECT,
         related_name='invoices',
     )
+    # related_name differs from buyer's 'invoices': both point at User now, so
+    # user.invoices stays "what I bought" and does not silently become a mix.
     seller = models.ForeignKey(
-        Seller,
+        User,
         on_delete=models.PROTECT,
-        related_name='invoices',
+        limit_choices_to={'profile__is_seller': True},
+        related_name='invoices_as_seller',
     )
     quantity = models.PositiveIntegerField(
         default=1,

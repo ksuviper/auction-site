@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 
-{% block title %}{{ seller.name }} – Above Status Quo{% endblock %}
+{% block title %}{{ seller_profile.display_name }} – Above Status Quo{% endblock %}
 
 {% block content %}
 <nav aria-label="breadcrumb" class="mb-4">
   <ol class="breadcrumb fs-5">
     <li class="breadcrumb-item"><a href="{% url 'home' %}">Home</a></li>
-    <li class="breadcrumb-item active" aria-current="page">{{ seller.name }}</li>
+    <li class="breadcrumb-item active" aria-current="page">{{ seller_profile.display_name }}</li>
   </ol>
 </nav>
 
@@ -34,32 +34,38 @@
             <i class="fas fa-store fa-lg text-white"></i>
           </div>
           <div>
-            <h1 class="h2 fw-bold mb-0">{{ seller.name }}</h1>
-            <span class="text-muted">Week of {{ seller.active_week|date:"M j, Y" }}</span>
+            <h1 class="h2 fw-bold mb-0">{{ seller_profile.display_name }}</h1>
+            {% if seller_profile.seller_active_week %}
+            <span class="text-muted">Week of {{ seller_profile.seller_active_week|date:"M j, Y" }}</span>
+            {% endif %}
           </div>
         </div>
-        {% if seller.bio %}
-        <p class="fs-5 mb-3">{{ seller.bio }}</p>
+        {% if seller_profile.seller_bio %}
+        <p class="fs-5 mb-3">{{ seller_profile.seller_bio }}</p>
         {% endif %}
         <div class="row g-2">
+          {% if seller_profile.seller_payment_methods %}
           <div class="col-sm-6">
             <div class="d-flex align-items-start gap-2">
               <i class="fas fa-credit-card text-primary mt-1"></i>
               <div>
                 <div class="fw-semibold">Accepted Payments</div>
-                <div class="text-muted">{{ seller.accepted_payment_methods }}</div>
+                <div class="text-muted">{{ seller_profile.seller_payment_methods }}</div>
               </div>
             </div>
           </div>
+          {% endif %}
+          {% if seller_profile.seller_shipping_fee is not None %}
           <div class="col-sm-6">
             <div class="d-flex align-items-start gap-2">
               <i class="fas fa-truck text-primary mt-1"></i>
               <div>
-                <div class="fw-semibold">Shipping Fee</div>
-                <div class="text-muted">${{ seller.shipping_fee }}</div>
+                <div class="fw-semibold">Standard Shipping</div>
+                <div class="text-muted">${{ seller_profile.seller_shipping_fee }}</div>
               </div>
             </div>
           </div>
+          {% endif %}
         </div>
       </div>
     </div>

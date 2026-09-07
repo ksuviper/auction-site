@@ -26,9 +26,9 @@ from auctions.models import (
     AuctionCategory,
     AuctionListing,
     Invoice,
-    Seller,
     Subscription,
 )
+from auctions.tests.utils import make_seller
 
 User = get_user_model()
 
@@ -37,11 +37,7 @@ User = get_user_model()
 class BuyNowTests(TestCase):
     def setUp(self):
         self.category = AuctionCategory.objects.create(name='Daylilies')
-        self.seller = Seller.objects.create(
-            name='Test Seller',
-            accepted_payment_methods='PayPal',
-            shipping_fee='5.00',
-        )
+        self.seller = make_seller('testseller', first_name='Test', last_name='Seller')
         self.listing = self._make_listing()
         self.url = reverse('buy_now', kwargs={'pk': self.listing.pk})
 
@@ -130,11 +126,7 @@ class MultiQuantityBuyNowTests(TestCase):
 
     def setUp(self):
         self.category = AuctionCategory.objects.create(name='Daylilies')
-        self.seller = Seller.objects.create(
-            name='Test Seller',
-            accepted_payment_methods='PayPal',
-            shipping_fee='5.00',
-        )
+        self.seller = make_seller('testseller', first_name='Test', last_name='Seller')
 
     def _listing(self, quantity=5, shipping_mode='flat', price='12.00'):
         now = timezone.now()
@@ -368,11 +360,7 @@ class BuyNowOversellGuardTests(TestCase):
 
     def setUp(self):
         self.category = AuctionCategory.objects.create(name='Daylilies')
-        self.seller = Seller.objects.create(
-            name='Guard Seller',
-            accepted_payment_methods='PayPal',
-            shipping_fee='5.00',
-        )
+        self.seller = make_seller('guardseller', first_name='Guard', last_name='Seller')
 
     def _listing(self, quantity):
         now = timezone.now()
@@ -454,11 +442,7 @@ class BuyNowRaceConditionTests(TransactionTestCase):
 
     def setUp(self):
         self.category = AuctionCategory.objects.create(name='Daylilies')
-        self.seller = Seller.objects.create(
-            name='Race Seller',
-            accepted_payment_methods='PayPal',
-            shipping_fee='5.00',
-        )
+        self.seller = make_seller('raceseller', first_name='Race', last_name='Seller')
         now = timezone.now()
         self.listing = AuctionListing.objects.create(
             title='Contested Daylily',
@@ -572,11 +556,7 @@ class BuyNowStockPolicyTests(TestCase):
 
     def setUp(self):
         self.category = AuctionCategory.objects.create(name='Daylilies')
-        self.seller = Seller.objects.create(
-            name='Policy Seller',
-            accepted_payment_methods='PayPal',
-            shipping_fee='5.00',
-        )
+        self.seller = make_seller('policyseller', first_name='Policy', last_name='Seller')
 
     def test_ended_listing_with_stock_left_is_closed_by_the_scheduled_job(self):
         now = timezone.now()
@@ -671,11 +651,7 @@ class BuyNowQuantityDefaultTests(TestCase):
 
     def setUp(self):
         self.category = AuctionCategory.objects.create(name='Daylilies')
-        self.seller = Seller.objects.create(
-            name='Default Seller',
-            accepted_payment_methods='PayPal',
-            shipping_fee='5.00',
-        )
+        self.seller = make_seller('defaultseller', first_name='Default', last_name='Seller')
         now = timezone.now()
         self.listing = AuctionListing.objects.create(
             title='Default Qty Daylily',
@@ -738,10 +714,8 @@ class CloseEndedBuyNowTests(TestCase):
 
     def setUp(self):
         self.category = AuctionCategory.objects.create(name='Daylilies')
-        self.seller = Seller.objects.create(
-            name='Closing Seller',
-            accepted_payment_methods='PayPal',
-            shipping_fee='5.00',
+        self.seller = make_seller(
+            'closingseller', first_name='Closing', last_name='Seller',
             email='seller@example.com',
         )
 

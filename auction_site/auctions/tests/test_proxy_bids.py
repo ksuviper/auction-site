@@ -14,9 +14,9 @@ from auctions.models import (
     AuctionListing,
     Bid,
     ProxyBid,
-    Seller,
     Subscription,
 )
+from auctions.tests.utils import make_seller
 
 User = get_user_model()
 
@@ -25,9 +25,7 @@ User = get_user_model()
 class ProxyBidTests(TestCase):
     def setUp(self):
         self.category = AuctionCategory.objects.create(name='Daylilies')
-        self.seller = Seller.objects.create(
-            name='Test Seller', accepted_payment_methods='PayPal', shipping_fee='5.00',
-        )
+        self.seller = make_seller('proxyseller', first_name='Proxy', last_name='Seller')
         self.listing = self._make_listing()
         self.proxy_url = reverse('place_proxy_bid', kwargs={'pk': self.listing.pk})
         self.bid_url = reverse('place_bid', kwargs={'pk': self.listing.pk})

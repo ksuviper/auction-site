@@ -17,7 +17,6 @@ from .models import (
     Invoice,
     ListingComment,
     ProxyBid,
-    Seller,
     Subscription,
     UserProfile,
     Wishlist,
@@ -200,29 +199,65 @@ class UserProfileAdmin(ModelAdmin):
     # 'ada') is not something an admin can recognise a person by — the address
     # they registered with is.
     list_display = (
-        'user', 'user_email', 'is_approved', 'phone_number', 'subscription_required',
+        'user', 'user_email', 'is_approved', 'is_seller', 'phone_number',
+        'subscription_required',
     )
-    list_editable = ('is_approved', 'subscription_required')
-    list_filter = (ApprovalStatusFilter, 'subscription_required')
+    list_editable = ('is_approved', 'is_seller', 'subscription_required')
+    list_filter = (ApprovalStatusFilter, 'is_seller', 'subscription_required')
     list_select_related = ('user',)
     search_fields = ('user__username', 'user__email', 'phone_number')
     raw_id_fields = ('user',)
+    # Seller details are grouped and labelled so it is obvious they only matter
+    # once "Is seller" is ticked — they are inert on a buyer's profile.
+    fieldsets = (
+        (None, {'fields': ('user', 'is_approved', 'subscription_required')}),
+        ('Contact', {'fields': ('phone_number', 'country', 'address', 'notes')}),
+        (
+            'Seller details',
+            {
+                'fields': (
+                    'is_seller', 'seller_category', 'seller_active_week',
+                    'seller_bio', 'seller_shipping_fee',
+                    'seller_payment_methods', 'seller_notify_on_comments',
+                ),
+                'description': (
+                    'Only used when "Is seller" is ticked. Sellers can be '
+                    'chosen when adding a listing and get a read-only sales '
+                    'dashboard; they cannot create or edit listings themselves.'
+                ),
+            },
+        ),
+        ('Login & security', {'fields': ('email_login_code_enabled',)}),
+    )
 
     @admin.display(description='Email', ordering='user__email')
     def user_email(self, obj):
         return obj.user.email or '—'
 
 
-@admin.register(Seller)
-class SellerAdmin(ModelAdmin):
-    list_display = (
-        'name', 'email', 'notify_on_comments', 'active_week',
-        'shipping_fee', 'accepted_payment_methods',
-    )
-    list_editable = ('notify_on_comments',)
-    list_filter = ('active_week', 'notify_on_comments')
-    search_fields = ('name', 'email', 'bio')
-    date_hierarchy = 'active_week'
+class SellerFilter(admin.SimpleListFilter):
+    """
+    Filter listings by seller, offering only seller-flagged accounts.
+
+    Django's default FK filter would render an option for every User on the
+    site — buyers included — which is both a long list and a misleading one.
+    """
+
+    title = 'seller'
+    parameter_name = 'seller'
+
+    def lookups(self, request, model_admin):
+        sellers = (
+            User.objects.filter(profile__is_seller=True)
+            .select_related('profile')
+            .order_by('username')
+        )
+        return [(user.pk, user.profile.display_name) for user in sellers]
+
+    def queryset(self, request, queryset):
+        if self.value():
+            return queryset.filter(seller_id=self.value())
+        return queryset
 
 
 @admin.register(AuctionListing)
@@ -232,7 +267,7 @@ class AuctionListingAdmin(ModelAdmin):
         'image_preview',
         'title',
         'category',
-        'seller',
+        'seller_display',
         'listing_type',
         'start_price',
         'current_bid',
@@ -248,12 +283,24 @@ class AuctionListingAdmin(ModelAdmin):
     )
     list_filter = (
         'listing_type', BuyNowStockFilter, 'shipping_mode', 'is_active',
-        'is_closed', 'category', 'seller',
+        'is_closed', 'category', SellerFilter,
     )
-    search_fields = ('title', 'description')
-    raw_id_fields = ('winner',)
+    search_fields = (
+        'title', 'description', 'seller__username', 'seller__email',
+        'seller__first_name', 'seller__last_name',
+    )
+    raw_id_fields = ('winner', 'seller')
+    list_select_related = ('seller__profile', 'category')
     date_hierarchy = 'starts_at'
     readonly_fields = ('image_preview',)
+
+    @admin.display(description='Seller', ordering='seller__username')
+    def seller_display(self, obj):
+        """The seller's display name — a raw User row shows only a username."""
+        profile = getattr(obj.seller, 'profile', None)
+        if profile is None:
+            return obj.seller.get_username()
+        return profile.display_name
 
     @admin.display(description='Shipping', ordering='shipping_fee')
     def shipping_display(self, obj):
@@ -315,7 +362,10 @@ class InvoiceAdmin(ModelAdmin):
         'created_at',
     )
     list_filter = ('is_sent', 'is_manually_created', 'payment_method')
-    search_fields = ('listing__title', 'item_description', 'buyer__username', 'seller__name')
+    search_fields = (
+        'listing__title', 'item_description', 'buyer__username',
+        'seller__username', 'seller__email',
+    )
     raw_id_fields = ('listing', 'buyer', 'seller')
     date_hierarchy = 'created_at'
 
@@ -444,8 +494,10 @@ class UserProfileInline(StackedInline):
     # consequential thing on the page. Ticking it here emails them, same as the
     # changelist action — see notify_user_of_approval in signals.py.
     fields = (
-        'is_approved', 'subscription_required', 'phone_number', 'country',
-        'address', 'notes',
+        'is_approved', 'is_seller', 'subscription_required', 'phone_number',
+        'country', 'address', 'notes', 'seller_category', 'seller_active_week',
+        'seller_bio', 'seller_shipping_fee', 'seller_payment_methods',
+        'seller_notify_on_comments',
     )
 
 
@@ -464,8 +516,10 @@ class CustomUserAdmin(BaseUserAdmin, ModelAdmin):
     inlines = [UserProfileInline]
     # Approval decides whether an account can log in, so it belongs on the list
     # people actually browse — not only on the User profiles changelist.
-    list_display = BaseUserAdmin.list_display + ('approval_status',)
-    list_filter = BaseUserAdmin.list_filter + ('profile__is_approved',)
+    list_display = BaseUserAdmin.list_display + ('approval_status', 'is_seller')
+    list_filter = BaseUserAdmin.list_filter + (
+        'profile__is_approved', 'profile__is_seller',
+    )
     list_select_related = ('profile',)
 
     @admin.display(description='Approval', ordering='profile__is_approved')
@@ -476,3 +530,10 @@ class CustomUserAdmin(BaseUserAdmin, ModelAdmin):
         if profile is None:
             return 'No profile'
         return 'Approved' if profile.is_approved else 'Awaiting approval'
+
+    @admin.display(
+        description='Seller', boolean=True, ordering='profile__is_seller'
+    )
+    def is_seller(self, obj):
+        """Whether this account can be picked when adding a listing."""
+        return bool(getattr(getattr(obj, 'profile', None), 'is_seller', False))

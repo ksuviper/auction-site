@@ -100,7 +100,7 @@
       <tbody>
         {% for row in by_seller %}
         <tr>
-          <td>{{ row.seller__name }}</td>
+          <td>{{ row.seller_name }}</td>
           <td class="text-end">{{ row.count }}</td>
           <td class="text-end">{{ row.units }}</td>
           <td class="text-end">${{ row.total|floatformat:2 }}</td>

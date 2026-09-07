@@ -25,7 +25,7 @@
         {% for group in groups %}
         <div class="card mb-4 shadow-sm">
             <div class="card-header bg-dark text-white d-flex align-items-center justify-content-between">
-                <h5 class="mb-0">{{ group.seller.name }}</h5>
+                <h5 class="mb-0">{{ group.seller.profile.display_name }}</h5>
                 <span class="badge bg-secondary">{{ group.invoices|length }} invoice{{ group.invoices|length|pluralize }}</span>
             </div>
             <div class="table-responsive">

@@ -296,9 +296,15 @@ UNFOLD = {
                         "link": reverse_lazy("admin:auctions_auctioncategory_changelist"),
                     },
                     {
+                        # Sellers are User accounts with the seller flag, not
+                        # records of their own, so this is the profile
+                        # changelist filtered to them.
                         "title": "Sellers",
                         "icon": "storefront",
-                        "link": reverse_lazy("admin:auctions_seller_changelist"),
+                        "link": format_lazy(
+                            "{}?is_seller__exact=1",
+                            reverse_lazy("admin:auctions_userprofile_changelist"),
+                        ),
                     },
                     {
                         "title": "Bids",

@@ -37,6 +37,22 @@ def _safe_send(subject, body, recipients):
         logger.exception('Failed to send email "%s" to %s', subject, recipients)
 
 
+def seller_display_name(user) -> str:
+    """
+    How to refer to a seller in emails, CSV exports and admin columns.
+
+    Delegates to UserProfile.display_name so screens and emails cannot drift
+    apart, and falls back to the username if the profile row is somehow missing
+    — a name is never important enough to raise on.
+    """
+    if user is None:
+        return ''
+    profile = getattr(user, 'profile', None)
+    if profile is not None:
+        return profile.display_name
+    return user.get_username()
+
+
 def has_active_subscription(user) -> bool:
     """
     Return True if ``user`` is allowed to bid or make purchases.

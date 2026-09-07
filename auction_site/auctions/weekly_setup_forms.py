@@ -1,79 +1,62 @@
 from django import forms
+from django.contrib.auth import get_user_model
 
-from .models import AuctionCategory, AuctionListing, Seller
+from .models import AuctionCategory, AuctionListing
+
+User = get_user_model()
+
+
+def seller_queryset():
+    """
+    The accounts that may be chosen as a seller, in a stable display order.
+
+    A seller is a User with profile.is_seller ticked — there is no separate
+    Seller record, and nothing here creates an account. Someone who should be
+    selectable but is not gets flagged in the admin first.
+    """
+    return (
+        User.objects.filter(profile__is_seller=True)
+        .select_related('profile')
+        .order_by('first_name', 'last_name', 'username')
+    )
+
+
+class SellerChoiceField(forms.ModelChoiceField):
+    """A seller picker labelled by display name rather than by username."""
+
+    def label_from_instance(self, obj):
+        profile = getattr(obj, 'profile', None)
+        name = profile.display_name if profile else obj.get_username()
+        week = getattr(profile, 'seller_active_week', None)
+        return f'{name} (week of {week})' if week else name
 
 
 class WeeklySellerForm(forms.Form):
-    """Step 1 — pick a category and create or select the week's seller."""
+    """
+    Step 1 — choose which seller this week's listings belong to.
 
-    SELLER_MODE_CHOICES = [
-        ('new', 'Create a new seller'),
-        ('existing', 'Use an existing seller'),
-    ]
+    Selection only. Creating a seller inline used to happen here, which meant
+    the same person could end up as both a User account and one or more
+    standalone Seller rows; a seller is now just a User with the seller flag
+    ticked, set in the admin.
+    """
 
-    seller_mode = forms.ChoiceField(
-        choices=SELLER_MODE_CHOICES,
-        widget=forms.RadioSelect,
-        initial='new',
-    )
-    existing_seller = forms.ModelChoiceField(
-        queryset=Seller.objects.order_by('-active_week', 'name'),
-        required=False,
-        empty_label='— select —',
-        help_text='Only required when using an existing seller.',
+    seller = SellerChoiceField(
+        queryset=User.objects.none(),
+        empty_label='— select a seller —',
+        label='Seller',
+        help_text='Only accounts flagged as sellers in the admin appear here.',
+        widget=forms.Select(attrs={'class': 'form-select form-select-lg'}),
     )
 
-    # Fields for creating / reviewing a seller.
-    #
-    # No category here: Seller.category was removed in migration 0005, and this
-    # form still passed it to Seller.objects.create(), so creating a new seller
-    # raised TypeError. Category belongs to the listing now, and the
-    # add-listing form asks for it there.
-    name = forms.CharField(max_length=200, required=False)
-    email = forms.EmailField(required=False, help_text='Optional — for auction-end notifications.')
-    bio = forms.CharField(widget=forms.Textarea(attrs={'rows': 3}), required=False)
-    accepted_payment_methods = forms.CharField(
-        required=False,
-        help_text='e.g. PayPal, Venmo, Zelle',
-    )
-    shipping_fee = forms.DecimalField(max_digits=7, decimal_places=2, required=False)
-    active_week = forms.DateField(
-        required=False,
-        widget=forms.DateInput(attrs={'type': 'date'}),
-        help_text='Start date of the week this seller is active.',
-    )
-
-    def clean(self):
-        cleaned = super().clean()
-        mode = cleaned.get('seller_mode')
-
-        if mode == 'existing':
-            if not cleaned.get('existing_seller'):
-                self.add_error('existing_seller', 'Please select a seller.')
-        else:
-            required = {
-                'name': 'Name',
-                'accepted_payment_methods': 'Accepted payment methods',
-                'shipping_fee': 'Shipping fee',
-                'active_week': 'Active week',
-            }
-            for field, label in required.items():
-                if not cleaned.get(field):
-                    self.add_error(field, f'{label} is required when creating a new seller.')
-
-        return cleaned
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Evaluated per instance so a seller flagged mid-session shows up on the
+        # next page load rather than at process start.
+        self.fields['seller'].queryset = seller_queryset()
 
     def save(self):
-        if self.cleaned_data['seller_mode'] == 'existing':
-            return self.cleaned_data['existing_seller']
-        return Seller.objects.create(
-            name=self.cleaned_data['name'],
-            email=self.cleaned_data.get('email') or '',
-            bio=self.cleaned_data.get('bio') or '',
-            accepted_payment_methods=self.cleaned_data['accepted_payment_methods'],
-            shipping_fee=self.cleaned_data['shipping_fee'],
-            active_week=self.cleaned_data['active_week'],
-        )
+        return self.cleaned_data['seller']
 
 
 class AuctionListingForm(forms.ModelForm):
@@ -174,15 +157,18 @@ class AuctionListingForm(forms.ModelForm):
             'Flat fee: buyer pays shipping once no matter how many they buy. '
             'Per item: shipping is multiplied by the quantity they buy.'
         )
-        if self.seller is not None:
+        seller_profile = getattr(self.seller, 'profile', None)
+        standard_fee = getattr(seller_profile, 'seller_shipping_fee', None)
+        if seller_profile is not None and standard_fee is not None:
             self.fields['shipping_fee'].help_text = (
-                f"What the buyer pays to ship this plant. Leave blank to use "
-                f"{self.seller.name}'s standard fee of ${self.seller.shipping_fee}."
+                f'What the buyer pays to ship this plant. Leave blank to use '
+                f"{seller_profile.display_name}'s standard fee of "
+                f'${standard_fee}.'
             )
         else:
             self.fields['shipping_fee'].help_text = (
-                "What the buyer pays to ship this plant. Leave blank to use the "
-                "seller's standard fee."
+                'What the buyer pays to ship this plant. This seller has no '
+                'standard fee on file, so leaving it blank means free shipping.'
             )
 
     def clean(self):

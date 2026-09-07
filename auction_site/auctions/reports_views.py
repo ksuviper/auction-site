@@ -11,6 +11,7 @@ from django.views import View
 
 from .mixins import StaffRequiredMixin
 from .models import AuctionListing, Invoice
+from .utils import seller_display_name
 
 
 class ReportsView(StaffRequiredMixin, View):
@@ -61,9 +62,16 @@ class ReportsView(StaffRequiredMixin, View):
         ]
 
         # ── By seller ────────────────────────────────────────────────────────
+        # Grouped by account rather than by a seller's name, which is no longer
+        # a column of its own — a User carries first/last name and username, and
+        # the display name is assembled from them. Pulling all three keeps this
+        # one query instead of a lookup per row.
         by_seller = list(
             Invoice.objects
-            .values('seller__name')
+            .values(
+                'seller_id', 'seller__first_name', 'seller__last_name',
+                'seller__username',
+            )
             .annotate(
                 count=Count('pk'),
                 units=Coalesce(Sum('quantity'), 0),
@@ -71,6 +79,11 @@ class ReportsView(StaffRequiredMixin, View):
             )
             .order_by('-total')
         )
+        for row in by_seller:
+            full_name = (
+                f"{row['seller__first_name']} {row['seller__last_name']}".strip()
+            )
+            row['seller_name'] = full_name or row['seller__username']
 
         # ── By category ──────────────────────────────────────────────────────
         # Also moved onto Invoice. The old version grouped listings and summed
@@ -125,7 +138,7 @@ def _invoice_rows():
     yield _CSV_HEADERS
     qs = (
         Invoice.objects
-        .select_related('listing', 'buyer', 'seller')
+        .select_related('listing', 'buyer', 'seller__profile')
         .order_by('-created_at')
         .iterator(chunk_size=500)
     )
@@ -133,7 +146,7 @@ def _invoice_rows():
         yield [
             inv.pk,
             inv.buyer.username,
-            inv.seller.name,
+            seller_display_name(inv.seller),
             inv.item_display,
             # A Buy It Now invoice can cover several units, so the dollar
             # columns alone no longer say how many plants shipped.

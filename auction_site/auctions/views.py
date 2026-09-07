@@ -1,8 +1,12 @@
+from decimal import Decimal
+
 from django.conf import settings
 from django.contrib import messages
+from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
-from django.db.models import F
+from django.db.models import F, Sum
+from django.db.models.functions import Coalesce
 from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse, reverse_lazy
@@ -28,11 +32,12 @@ from .models import (
     Invoice,
     ListingComment,
     ProxyBid,
-    Seller,
     UserProfile,
 )
 from .services import run_proxy_bids
 from .utils import _safe_send, has_active_subscription
+
+User = get_user_model()
 
 
 # ── Registration ─────────────────────────────────────────────────────────────
@@ -205,7 +210,7 @@ class CategoryListingView(ListView):
                 is_closed=False,
                 ends_at__gt=now,
             )
-            .select_related('seller', 'category')
+            .select_related('seller__profile', 'category')
             .order_by('ends_at')
         )
 
@@ -216,22 +221,75 @@ class CategoryListingView(ListView):
 
 
 class SellerListingView(ListView):
+    """A seller's public page: who they are, and what they have open now."""
+
     template_name = 'auctions/seller_listings.html'
     context_object_name = 'listings'
 
     def get_queryset(self):
-        self.seller = get_object_or_404(Seller, pk=self.kwargs['pk'])
-        now = timezone.now()
-        return (
-            AuctionListing.objects
-            .filter(seller=self.seller, is_active=True, is_closed=False, ends_at__gt=now)
-            .select_related('category')
-            .order_by('ends_at')
+        # Filtering on profile__is_seller matters: without it this URL would
+        # render a public page for any user account whose pk was guessed.
+        self.seller = get_object_or_404(
+            User.objects.select_related('profile'),
+            pk=self.kwargs['pk'],
+            profile__is_seller=True,
         )
+        return self.seller.profile.active_listings()
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         ctx['seller'] = self.seller
+        ctx['seller_profile'] = self.seller.profile
+        return ctx
+
+
+class SellerDashboardView(LoginRequiredMixin, TemplateView):
+    """
+    A seller's own read-only record of what is listed and what has sold.
+
+    Visibility only. Sellers do not create or edit listings — an admin does,
+    through Add Listing — so there is deliberately nothing actionable here; a
+    correction is a conversation with an admin, not a form on this page.
+    """
+
+    template_name = 'auctions/seller_dashboard.html'
+
+    def dispatch(self, request, *args, **kwargs):
+        if request.user.is_authenticated:
+            profile = getattr(request.user, 'profile', None)
+            if profile is None or not profile.is_seller:
+                messages.info(
+                    request,
+                    'The seller dashboard is only available to seller accounts.',
+                )
+                return redirect('home')
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        profile = self.request.user.profile
+
+        # Every query below is filtered to this user. A seller seeing another
+        # seller's sales is the one thing this page must never do.
+        active = list(profile.active_listings())
+        sales = (
+            Invoice.objects
+            .filter(seller=self.request.user)
+            .select_related('listing', 'buyer')
+            .order_by('-created_at')
+        )
+
+        totals = sales.aggregate(
+            units=Coalesce(Sum('quantity'), 0),
+            revenue=Coalesce(Sum('amount'), Decimal('0.00')),
+        )
+
+        ctx['profile'] = profile
+        ctx['active_listings'] = active
+        ctx['active_count'] = len(active)
+        ctx['sales'] = sales
+        ctx['units_sold'] = totals['units']
+        ctx['total_revenue'] = totals['revenue']
         return ctx
 
 
@@ -380,7 +438,8 @@ class BuyNowView(LoginRequiredMixin, View):
             # Row lock so concurrent purchase attempts serialize — the second
             # one blocks here, then re-reads the stock count below.
             listing = get_object_or_404(
-                AuctionListing.objects.select_for_update().select_related('seller'),
+                AuctionListing.objects.select_for_update()
+                .select_related('seller__profile'),
                 pk=pk,
             )
 
@@ -390,10 +449,6 @@ class BuyNowView(LoginRequiredMixin, View):
 
             if listing.is_closed or not listing.is_active or listing.ends_at <= timezone.now():
                 messages.error(request, 'Sorry, this item is no longer available.')
-                return redirect('listing_detail', pk=pk)
-
-            if listing.seller is None:
-                messages.error(request, 'This item cannot be purchased right now.')
                 return redirect('listing_detail', pk=pk)
 
             # Bind the form to the locked row. Its check is against stock nobody
@@ -479,6 +534,15 @@ class BuyNowView(LoginRequiredMixin, View):
 
     def _send_purchase_emails(self, listing, buyer, invoice):
         seller = listing.seller
+        seller_profile = getattr(seller, 'profile', None)
+        seller_name = (
+            seller_profile.display_name if seller_profile
+            else seller.get_username()
+        )
+        payment_methods = (
+            getattr(seller_profile, 'seller_payment_methods', '')
+            or '(ask the seller)'
+        )
         admin_email = getattr(settings, 'ADMIN_EMAIL', '')
         shipping_note = (
             'per item' if listing.shipping_mode == 'per_item' else 'flat rate'
@@ -496,8 +560,8 @@ Item total:      ${invoice.amount}
 Shipping fee:    ${invoice.shipping_fee} ({shipping_note})
 Total:           ${invoice.total}
 
-Seller:          {seller.name}
-Accepted payment: {seller.accepted_payment_methods}
+Seller:          {seller_name}
+Accepted payment: {payment_methods}
 
 Please arrange payment with the seller using one of their accepted methods.
 You can view your invoice (#{invoice.pk}) any time from your account.
@@ -511,7 +575,7 @@ You can view your invoice (#{invoice.pk}) any time from your account.
             )
 
         # Seller — sale notification (falls back to admin if no seller email).
-        seller_recipient = (seller.email if seller.email else '') or admin_email
+        seller_recipient = seller.email or admin_email
         if seller_recipient:
             body = f"""\
 Your item "{listing.title}" was purchased by {buyer.username}.
@@ -655,7 +719,11 @@ class PostCommentView(LoginRequiredMixin, View):
         admin_email = getattr(settings, 'ADMIN_EMAIL', '')
         if admin_email:
             recipients.append(admin_email)
-        if listing.seller and listing.seller.email and listing.seller.notify_on_comments:
+        seller_profile = getattr(listing.seller, 'profile', None)
+        if (
+            listing.seller.email
+            and getattr(seller_profile, 'seller_notify_on_comments', False)
+        ):
             recipients.append(listing.seller.email)
         if not recipients:
             return

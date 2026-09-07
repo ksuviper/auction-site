@@ -10,7 +10,7 @@
     <li>
       <a href="{% url 'seller_listings' pk=seller.pk %}"
          class="sidebar-seller-link d-block py-1 px-2 rounded text-decoration-none">
-        <i class="fas fa-store me-1 small"></i>{{ seller.name }}
+        <i class="fas fa-store me-1 small"></i>{{ seller.profile.display_name }}
       </a>
     </li>
     {% endfor %}

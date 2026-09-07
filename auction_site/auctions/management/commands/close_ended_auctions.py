@@ -18,7 +18,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from auctions.models import AuctionListing, Invoice
-from auctions.utils import _safe_send
+from auctions.utils import _safe_send, seller_display_name
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ class Command(BaseCommand):
         ended = (
             AuctionListing.objects
             .filter(ends_at__lte=now, is_closed=False)
-            .select_related('seller', 'category', 'winner')
+            .select_related('seller__profile', 'category', 'winner')
         )
 
         count = ended.count()
@@ -100,7 +100,7 @@ class Command(BaseCommand):
         listing = (
             AuctionListing.objects
             .select_for_update()
-            .select_related('seller')
+            .select_related('seller__profile')
             .get(pk=listing.pk)
         )
 
@@ -120,7 +120,7 @@ class Command(BaseCommand):
         listing.save(update_fields=['is_closed', 'is_active', 'winner', 'updated_at'])
 
         invoice = None
-        if top_bid and listing.seller:
+        if top_bid:
             invoice = Invoice.objects.create(
                 listing=listing,
                 buyer=top_bid.bidder,
@@ -138,11 +138,6 @@ class Command(BaseCommand):
                 'Invoice #%d created for listing "%s" (winner: %s, amount: $%s)',
                 invoice.pk, listing.title, top_bid.bidder.username, top_bid.amount,
             )
-        elif top_bid and not listing.seller:
-            logger.warning(
-                'Listing "%s" has no seller — skipping invoice creation.', listing.title
-            )
-
         return top_bid, invoice
 
     # ── Email notifications ───────────────────────────────────────────────────
@@ -171,13 +166,16 @@ class Command(BaseCommand):
             return
 
         seller = listing.seller
-        seller_block = ''
-        if seller:
-            seller_block = (
-                f'\nSeller:              {seller.name}'
-                f'\nAccepted payments:   {seller.accepted_payment_methods}'
-                f'\nShipping fee:        ${seller.shipping_fee}'
-            )
+        payments = (
+            getattr(seller.profile, 'seller_payment_methods', '')
+            or '(ask the seller)'
+        )
+        seller_block = (
+            f'\nSeller:              {seller_display_name(seller)}'
+            f'\nAccepted payments:   {payments}'
+            # The listing's own fee when it sets one, else the seller's.
+            f'\nShipping fee:        ${listing.shipping_rate}'
+        )
 
         body = f"""\
 Congratulations, {buyer.username}!
@@ -207,14 +205,14 @@ Thank you for bidding with ASQ Daylily Auctions!
         falls back to ADMIN_EMAIL for manual forwarding.
         """
         seller = listing.seller
-        seller_email = (seller.email if seller and seller.email else '')
+        seller_email = seller.email
         admin_email = getattr(settings, 'ADMIN_EMAIL', '')
         recipient = seller_email or admin_email
         if not recipient:
             return
 
         buyer = top_bid.bidder
-        seller_name = seller.name if seller else '(no seller on record)'
+        seller_name = seller_display_name(seller)
         routing_note = '' if seller_email else '\n[Note: seller has no email — forwarded to admin]\n'
 
         body = f"""\
@@ -244,7 +242,7 @@ Please contact the buyer to arrange payment and shipping.
             return
 
         buyer = top_bid.bidder
-        invoice_line = f'Invoice #{invoice.pk}' if invoice else 'None (no seller on listing)'
+        invoice_line = f'Invoice #{invoice.pk}' if invoice else 'None'
 
         body = f"""\
 [ASQ] Auction Closed — Summary
@@ -252,7 +250,7 @@ Please contact the buyer to arrange payment and shipping.
 Listing ID:   {listing.pk}
 Title:        {listing.title}
 Category:     {listing.category.name}
-Seller:       {listing.seller.name if listing.seller else 'None'}
+Seller:       {seller_display_name(listing.seller)}
 
 Winner:       {buyer.username}
 Email:        {buyer.email or '(none)'}
@@ -280,7 +278,7 @@ Closed at:    {timezone.now().strftime('%Y-%m-%d %H:%M %Z')}
 Listing ID:     {listing.pk}
 Title:          {listing.title}
 Category:       {listing.category.name}
-Seller:         {listing.seller.name if listing.seller else 'None'}
+Seller:         {seller_display_name(listing.seller)}
 Starting price: ${listing.start_price}
 
 No bids were placed. No invoice was created.

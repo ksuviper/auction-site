@@ -12,6 +12,7 @@ from .views import (
     ProfileDetailView,
     ProfileUpdateView,
     SecuritySettingsView,
+    SellerDashboardView,
     SellerListingView,
     ToggleEmailLoginCodeView,
 )
@@ -31,6 +32,8 @@ urlpatterns = [
         name='toggle_email_login_code',
     ),
     path('category/<slug:slug>/', CategoryListingView.as_view(), name='category_listings'),
+    # Ahead of seller/<int:pk>/ so the literal path is not read as a seller pk.
+    path('seller/dashboard/', SellerDashboardView.as_view(), name='seller_dashboard'),
     path('seller/<int:pk>/', SellerListingView.as_view(), name='seller_listings'),
     path('listing/<int:pk>/', ListingDetailView.as_view(), name='listing_detail'),
     path('listing/<int:pk>/bid/', PlaceBidView.as_view(), name='place_bid'),

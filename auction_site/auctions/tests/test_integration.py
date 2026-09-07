@@ -19,9 +19,9 @@ from auctions.models import (
     Invoice,
     ListingComment,
     ProxyBid,
-    Seller,
     Subscription,
 )
+from auctions.tests.utils import make_seller
 
 User = get_user_model()
 VERIFY_PATH = 'auctions.subscription_views.PayPalWebhookView._verify_signature'
@@ -34,9 +34,7 @@ VERIFY_PATH = 'auctions.subscription_views.PayPalWebhookView._verify_signature'
 class IntegrationTests(TestCase):
     def setUp(self):
         self.category = AuctionCategory.objects.create(name='Daylilies')
-        self.seller = Seller.objects.create(
-            name='Seller', accepted_payment_methods='PayPal', shipping_fee='5.00',
-        )
+        self.seller = make_seller('integrationseller', first_name='Integration')
 
     # ── helpers ───────────────────────────────────────────────────────────────
 

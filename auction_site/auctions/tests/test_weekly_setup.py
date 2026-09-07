@@ -2,9 +2,9 @@
 
 The bulk formset this replaced could never actually save: it collected no
 category and the view set none, so every submission hit NOT NULL on
-auctions_auctionlisting.category_id. Creating a seller was broken too — the form
-passed a `category` kwarg that migration 0005 removed from Seller. Both paths are
-covered below so neither can regress silently.
+auctions_auctionlisting.category_id. Step 1 was broken too — the seller form
+passed a `category` kwarg that migration 0005 had removed. Step 1 now only
+selects an existing seller account; there is nothing to create there any more.
 """
 
 import re
@@ -16,7 +16,8 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from auctions.models import AuctionCategory, AuctionListing, Seller
+from auctions.models import AuctionCategory, AuctionListing
+from auctions.tests.utils import make_seller
 
 User = get_user_model()
 
@@ -42,10 +43,8 @@ class WeeklySetupTestCase(TestCase):
         )
         self.client.force_login(self.staff)
         self.category = AuctionCategory.objects.create(name='Daylilies')
-        self.seller = Seller.objects.create(
-            name='Sunny Gardens',
-            accepted_payment_methods='PayPal',
-            shipping_fee='5.00',
+        self.seller = make_seller(
+            'sunnygardens', first_name='Sunny', last_name='Gardens',
             active_week=timezone.now().date(),
         )
         self.url = reverse('weekly_setup_listings', kwargs={'seller_pk': self.seller.pk})
@@ -55,40 +54,47 @@ class WeeklySetupTestCase(TestCase):
 
 
 class SellerStepTests(WeeklySetupTestCase):
-    """Step 1 must still work — it is preserved, not replaced."""
+    """Step 1 selects a seller account. It no longer creates anything."""
 
-    def test_creating_a_new_seller_succeeds(self):
-        """Regression: this used to raise TypeError on Seller(category=...)."""
+    def test_selecting_a_seller_succeeds(self):
         response = self.client.post(
-            reverse('weekly_setup'),
-            {
-                'seller_mode': 'new',
-                'name': 'Fresh Seller',
-                'accepted_payment_methods': 'Venmo',
-                'shipping_fee': '7.50',
-                'active_week': timezone.now().date().isoformat(),
-            },
-        )
-
-        seller = Seller.objects.get(name='Fresh Seller')
-        self.assertRedirects(
-            response,
-            reverse('weekly_setup_listings', kwargs={'seller_pk': seller.pk}),
-        )
-
-    def test_selecting_an_existing_seller_succeeds(self):
-        response = self.client.post(
-            reverse('weekly_setup'),
-            {'seller_mode': 'existing', 'existing_seller': self.seller.pk},
+            reverse('weekly_setup'), {'seller': self.seller.pk}
         )
 
         self.assertRedirects(response, self.url)
 
-    def test_new_seller_still_requires_its_own_fields(self):
-        response = self.client.post(reverse('weekly_setup'), {'seller_mode': 'new'})
+    def test_the_picker_offers_seller_flagged_accounts(self):
+        response = self.client.get(reverse('weekly_setup'))
+
+        self.assertTrue(response.context['has_sellers'])
+        self.assertContains(response, 'Sunny Gardens')
+
+    def test_a_non_seller_account_cannot_be_chosen(self):
+        """The picker is the gate: any User pk would otherwise be accepted."""
+        buyer = User.objects.create_user('plainbuyer', 'plain@example.com', 'pw')
+
+        response = self.client.post(reverse('weekly_setup'), {'seller': buyer.pk})
 
         self.assertEqual(response.status_code, 200)
-        self.assertFalse(Seller.objects.filter(name='').exists())
+        self.assertFalse(AuctionListing.objects.filter(seller=buyer).exists())
+
+    def test_choosing_nothing_is_an_error_not_a_crash(self):
+        response = self.client.post(reverse('weekly_setup'), {})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['form'].errors)
+
+    def test_no_sellers_yet_explains_what_to_do(self):
+        """An empty dropdown is a dead end; the fix lives in the admin."""
+        from auctions.models import UserProfile
+
+        UserProfile.objects.filter(user=self.seller).update(is_seller=False)
+
+        response = self.client.get(reverse('weekly_setup'))
+
+        self.assertFalse(response.context['has_sellers'])
+        self.assertContains(response, 'No sellers found')
+        self.assertContains(response, 'before adding listings')
 
 
 class SingleListingCreationTests(WeeklySetupTestCase):
@@ -262,9 +268,7 @@ class InformationalListTests(WeeklySetupTestCase):
         self.assertLess(section.index('Newer'), section.index('Older'))
 
     def test_only_this_sellers_listings_are_shown(self):
-        other = Seller.objects.create(
-            name='Other Seller', accepted_payment_methods='Cash', shipping_fee='1.00'
-        )
+        other = make_seller('otherseller', first_name='Other', last_name='Seller')
         now = timezone.now()
         AuctionListing.objects.create(
             title='Someone Elses Plant',
@@ -358,7 +362,7 @@ class ListingShippingFeeTests(WeeklySetupTestCase):
         # Decimal from the database, vs the string this fixture assigned.
         self.assertEqual(
             Decimal(str(response.context['form'].initial['shipping_fee'])),
-            Decimal(str(self.seller.shipping_fee)),
+            self.seller.profile.seller_shipping_fee,
         )
 
     def test_help_text_names_the_sellers_fallback(self):
@@ -427,8 +431,9 @@ class ListingShippingFeeTests(WeeklySetupTestCase):
             shipping_mode='flat', shipping_fee='9.50',
         ))
 
-        self.seller.shipping_fee = '99.00'
-        self.seller.save(update_fields=['shipping_fee'])
+        profile = self.seller.profile
+        profile.seller_shipping_fee = '99.00'
+        profile.save(update_fields=['seller_shipping_fee'])
 
         listing = AuctionListing.objects.get(title='Fixed Ship')
         self.assertEqual(listing.shipping_rate, Decimal('9.50'))
@@ -441,10 +446,7 @@ class ShippingFeeAtPurchaseTests(TestCase):
         from auctions.models import Subscription
 
         self.category = AuctionCategory.objects.create(name='Daylilies')
-        self.seller = Seller.objects.create(
-            name='Ship Seller', accepted_payment_methods='PayPal',
-            shipping_fee='5.00',
-        )
+        self.seller = make_seller('shipseller', first_name='Ship', last_name='Seller')
         self.buyer = User.objects.create_user('shipbuyer', 'shipbuyer@example.com', 'pw')
         Subscription.objects.create(user=self.buyer, plan='monthly', status='active')
         self.buyer.profile.country = 'US'

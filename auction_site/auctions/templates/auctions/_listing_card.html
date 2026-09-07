@@ -18,11 +18,9 @@
           {{ listing.title }}
         </a>
       </h3>
-      {% if listing.seller %}
       <p class="text-muted mb-2" style="font-size:0.9rem;">
-        <i class="fas fa-store me-1" aria-hidden="true"></i>{{ listing.seller.name }}
+        <i class="fas fa-store me-1" aria-hidden="true"></i>{{ listing.seller.profile.display_name }}
       </p>
-      {% endif %}
       <div class="mt-auto">
         {% if listing.current_bid > 0 %}
         <div class="mb-1">
