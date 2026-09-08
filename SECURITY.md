@@ -1,5 +1,9 @@
 # Security Guide — ASQ Daylily Auctions
 
+> The most recent security audit, with open findings and what was confirmed
+> clean, is in [SECURITY_AUDIT.md](SECURITY_AUDIT.md). Its checks run as
+> `python manage.py test auctions.tests.test_security_audit`.
+
 ## Secret key management
 
 `SECRET_KEY` must be a long, random string unique to each environment.

@@ -902,6 +902,14 @@ Admins can manage memberships under **Users → Subscriptions** in the admin
 
 ---
 
+## Security
+
+See [SECURITY.md](SECURITY.md) for deployment hardening and
+[SECURITY_AUDIT.md](SECURITY_AUDIT.md) for the latest audit — including the
+dependency upgrades it recommends and the decisions it leaves open.
+
+---
+
 ## Running the test suite
 
 ```bash

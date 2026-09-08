@@ -15,9 +15,11 @@ db.sqlite3-journal
 .env.local
 .env.*.local
 
-# Uploaded media — keep the folder structure but not the files
+# Uploaded media — keep the folder structure but not the files.
+# Every upload_to prefix needs a line here; site/ arrived with SiteSettings.
 media/listings/*
 !media/listings/.gitkeep
+media/site/*
 
 # Archives
 *.zip

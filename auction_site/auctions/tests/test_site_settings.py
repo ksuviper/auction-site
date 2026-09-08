@@ -9,6 +9,7 @@ square makes a bad icon — so nothing here derives one from the other.
 """
 
 import io
+import tempfile
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -18,6 +19,11 @@ from django.urls import reverse
 from auctions.models import SiteSettings, Subscription, UserProfile
 
 User = get_user_model()
+
+# The admin upload tests write real files. Pointing MEDIA_ROOT at a scratch
+# directory keeps them out of the working tree — the first run of this module
+# left two PNGs under media/site/ that nearly went into a commit.
+SCRATCH_MEDIA = tempfile.mkdtemp(prefix='asq-test-media-')
 
 
 def an_image(name='pic.png', size=(40, 40), colour=(120, 180, 90)):
@@ -170,6 +176,7 @@ class HeaderAndIconRenderTests(TestCase):
         self.assertContains(response, 'img/logo.png')
 
 
+@override_settings(MEDIA_ROOT=SCRATCH_MEDIA)
 class SiteSettingsAdminTests(TestCase):
     def setUp(self):
         staff = User.objects.create_user(
