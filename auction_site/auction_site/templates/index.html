@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load contact_tags %}
 
 {% block title %}Home – ASQ Daylily Auction Group{% endblock %}
 
@@ -101,7 +102,8 @@
     <section class="pt-4 border-top" aria-labelledby="about-us-heading">
       <h2 class="h4 fw-bold text-center mb-4" id="about-us-heading">About Us</h2>
       <div class="fs-5 mx-auto" style="max-width:52rem; line-height:1.8;">
-        {{ about_excerpt|safe }}
+        {# protect_emails in place of |safe: same pass-through, addresses rewritten. #}
+        {{ about_excerpt|protect_emails }}
       </div>
       {% if about_truncated %}
       <div class="text-center mt-4">

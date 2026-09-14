@@ -138,6 +138,7 @@ Visit `http://localhost:8000`. Log in at `/admin/` with your superuser credentia
 | `EMAIL_HOST_PASSWORD` | No | — | SMTP password or app-specific password |
 | `DEFAULT_FROM_EMAIL` | No | — | From address for outgoing mail |
 | `ADMIN_EMAIL` | No | — | Receives auction-close summaries, no-bid notifications, and new-account approval requests |
+| `CONTACT_EMAIL` | No | `asqdaylilies@gmail.com` | The address published to visitors on the FAQ and legal pages |
 | `GOOGLE_CLIENT_ID` | No | — | Google OAuth2 client ID |
 | `GOOGLE_CLIENT_SECRET` | No | — | Google OAuth2 client secret |
 | `FACEBOOK_APP_ID` | No | — | Facebook Login app ID |
@@ -913,6 +914,34 @@ Admins can manage memberships under **Users → Subscriptions** in the admin
 See [SECURITY.md](SECURITY.md) for deployment hardening and
 [SECURITY_AUDIT.md](SECURITY_AUDIT.md) for the latest audit — including the
 dependency upgrades it recommends and the decisions it leaves open.
+
+### The published contact address
+
+`CONTACT_EMAIL` appears on the FAQ, the data deletion page, the pending
+approval page and inside the Privacy Policy and Terms — but never as a plain
+address in the HTML. It is rendered by the `protected_email` tag, which sends
+the address reversed and base64-encoded in a `data-pe` attribute, with
+"name at example dot com" as the visible text. A small script rebuilds the
+real `mailto:` link in the browser.
+
+Address harvesters overwhelmingly work by pattern: they read `href="mailto:…"`
+and run a `user@host` regular expression over the response body. Neither
+pattern is present, so the page carries nothing for them to take.
+
+**It is not a guarantee.** A scraper that executes JavaScript, or one that
+understands "at" and "dot", still gets the address. The only complete fix is
+never publishing it — a contact form that posts to the server. Treat this as
+raising the cost of harvesting, not as ending it.
+
+Two things to know when editing:
+
+- **Admin-typed addresses are covered too.** FAQ answers and site page bodies
+  render through the `protect_emails` filter, which rewrites an address whether
+  it was typed as plain text or inserted as a mailto link. Nothing special is
+  needed when writing content.
+- **Do not hardcode the address in a new template.** Use
+  `{% load contact_tags %}` and `{% protected_email %}`. A test sweeps the
+  public pages for the literal address and fails if one reappears.
 
 ---
 

@@ -550,6 +550,12 @@ DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@asqdaylilies.com')
 # Admin / notification email
 ADMIN_EMAIL = os.getenv('ADMIN_EMAIL', '')
 
+# The address published to visitors, e.g. on the FAQ. Kept here rather than
+# typed into each template so it changes in one place. Pages render it through
+# the protected_email tag, which keeps it out of the HTML source in a form a
+# harvester would recognise — see auctions/templatetags/contact_tags.py.
+CONTACT_EMAIL = os.getenv('CONTACT_EMAIL', 'asqdaylilies@gmail.com')
+
 # ============================================================================
 # PayPal — Subscriptions / Memberships
 # Set these in .env. Run `python manage.py create_paypal_plans` to generate the

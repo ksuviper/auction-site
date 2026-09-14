@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load contact_tags %}
 
 {% block title %}Account Pending Approval – ASQ Daylily Auctions{% endblock %}
 
@@ -28,7 +29,7 @@
         <p class="text-muted mb-4">
           Approvals are usually handled within a day. If you haven't heard back
           after that, email
-          <a href="mailto:asqdaylilies@gmail.com">asqdaylilies@gmail.com</a>
+          {% protected_email %}
           and we'll take a look.
         </p>
 

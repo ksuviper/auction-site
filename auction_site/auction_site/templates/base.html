@@ -218,6 +218,13 @@
 
     <!-- Bootstrap 5 JS Bundle -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    {% comment %}
+      Rebuilds the mailto links that protected_email deliberately leaves out of
+      the HTML. Site-wide rather than per-page: a published address should
+      never depend on remembering to include a script. Not deferred — it is a
+      few lines and runs at the end of the body anyway.
+    {% endcomment %}
+    <script src="{% static 'js/protected-email.js' %}"></script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>

@@ -1,10 +1,16 @@
 {% extends "base.html" %}
+{% load contact_tags %}
 
 {% comment %}
-  body is rendered with |safe so an admin can use headings, lists and links.
+  body passes through as HTML so an admin can use headings, lists and links.
   Only staff can edit a SitePage, and staff already have full admin access, so
   this is trusted input in the same sense the admin itself is — but it does mean
   a SitePage body is not a place to paste markup from anywhere else.
+
+  protect_emails does that pass-through in place of |safe, and additionally
+  rewrites any address in the body. The seeded Privacy Policy and Terms both
+  end with a contact address, and those live in the database where a template
+  edit cannot reach them.
 {% endcomment %}
 
 {% block title %}{{ page.title }} – ASQ Daylily Auctions{% endblock %}
@@ -17,7 +23,7 @@
 
     <div class="card shadow-sm mb-4 mt-3">
       <div class="card-body p-4 fs-5" style="line-height:1.8;">
-        {{ page.body|safe }}
+        {{ page.body|protect_emails }}
       </div>
     </div>
 
