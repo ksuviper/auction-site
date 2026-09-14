@@ -433,3 +433,38 @@ class ProductionSettingsTests(TestCase):
                 self.assertRegex(
                     source, rf"{name}\s*=\s*os\.getenv\(", f'{name} not from env'
                 )
+
+
+class RobotsTxtTests(TestCase):
+    """
+    robots.txt used to end with a Sitemap line pointing at /sitemap.xml, a
+    route that has never existed. Crawlers got a 404 for every visit.
+    """
+
+    def _robots(self):
+        response = self.client.get('/robots.txt')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'text/plain')
+        return response.content.decode()
+
+    def test_every_advertised_sitemap_actually_exists(self):
+        """
+        Written as a rule, not a ban: adding a real sitemap later is fine as
+        long as the URL it advertises resolves. Today there are none.
+        """
+        for line in self._robots().splitlines():
+            if not line.lower().startswith('sitemap:'):
+                continue
+            url = line.split(':', 1)[1].strip()
+            path = '/' + url.split('/', 3)[-1] if '://' in url else url
+            with self.subTest(sitemap=url):
+                self.assertEqual(
+                    self.client.get(path).status_code, 200,
+                    f'robots.txt advertises {url} but it does not resolve',
+                )
+
+    def test_the_admin_and_account_areas_stay_off_limits(self):
+        robots = self._robots()
+
+        self.assertIn('Disallow: /admin/', robots)
+        self.assertIn('Disallow: /accounts/', robots)

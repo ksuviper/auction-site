@@ -6,33 +6,38 @@ combined invoicing, the multi-buy discount, and the site images. It re-checks
 the registration and MFA hardening from before those batches, since several of
 them touched `User` and `UserProfile`.
 
-**This is a report, not a fix.** Nothing in the codebase was changed as a result
-of it except the addition of `auctions/tests/test_security_audit.py`, which
-turns the "confirmed clean" items below into 23 tests so they stay confirmed.
-Everything under *Findings* is for a decision, in the order it should get one.
+The audit was delivered as a report first. The follow-up commit then applied
+the fixes the client approved and recorded their decisions on the rest; each
+finding below carries its outcome. `auctions/tests/test_security_audit.py`
+turns the "confirmed clean" items into 25 tests so they stay confirmed.
 
 ---
 
 ## Findings
 
-### 1. Five dependencies have known vulnerabilities — **act on this first**
+### 1. Five dependencies had known vulnerabilities — **fixed**
 
-`pip-audit -r requirements.txt` reports **68 known vulnerabilities in 5
-packages**. All have fixed versions available:
+`pip-audit -r requirements.txt` reported **68 known vulnerabilities in 5
+packages** at the time of the audit. All five are now bumped to the fixed
+versions:
 
-| Package | Pinned | Fix | Notes |
+| Package | Was | Now | Notes |
 |---|---|---|---|
-| `Django` | 6.0.3 | **6.0.8** | 26 advisories across five patch releases. Patch releases only — no behaviour changes expected. |
-| `Pillow` | 12.2.0 | **12.3.0** | 20 advisories. Pillow decodes every uploaded listing photo, banner and app icon, so this is the most exposed of the five. |
+| `Django` | 6.0.3 | **6.0.8** | 26 advisories across five patch releases. Patch releases only. |
+| `Pillow` | 12.2.0 | **12.3.0** | 20 advisories. Pillow decodes every uploaded listing photo, banner and app icon, so this was the most exposed of the five. |
 | `PyJWT` | 2.12.1 | **2.13.0** | 8 advisories. Used by the PayPal webhook signature path. |
 | `sqlparse` | 0.5.5 | **0.6.0** | 5 advisories. Django's SQL formatting dependency. |
-| `cryptography` | 46.0.5 | **46.0.7** clears 4; **50.0.0** clears all 10 | Check `paypalrestsdk` still installs against whichever you pick. |
+| `cryptography` | 46.0.5 | **50.0.0** | All 10 advisories cleared. |
+| `fido2` | 2.1.1 | **2.2.1** | Not vulnerable itself. Bumped because 2.1.1 pinned `cryptography < 49`, which would have left six of its advisories open. |
 
-**Recommendation:** bump all five in `requirements.txt`, reinstall, run the
-full suite (`python manage.py test auctions.tests`, 479 tests), and deploy.
-Not done here because the brief asked for findings before changes, and a
-Django bump deserves a deliberate deploy rather than riding along with an audit
-commit. Re-run `pip-audit` afterwards; it should report nothing.
+After the bumps: `pip-audit` reports *No known vulnerabilities found*, the full
+suite passes (481 tests), `check --deploy` is unchanged, and `makemigrations
+--check` finds no drift. `paypalrestsdk` installs unchanged against
+`cryptography` 50.
+
+**On the server:** `pip install -r requirements.txt` in the deploy venv, then
+restart gunicorn. Re-run `pip-audit` on the next audit; the pins will drift
+again.
 
 ### 2. `check --deploy` — one warning, and it is a deployment check, not a code one
 
@@ -74,15 +79,19 @@ The four the brief lists — signup, login, bid, proxy bid — all still are (se
 **Recommendation:** add the comment limit; it is one decorator. Your call on
 Buy It Now.
 
-### 5. `robots.txt` advertises a sitemap that does not exist
+### 5. `robots.txt` advertised a sitemap that does not exist — **fixed**
 
-It ends with `Sitemap: https://<host>/sitemap.xml`, and there is no such route.
-Crawlers get a 404. Harmless, untidy. It also predates `/admin/combined-invoices/`,
-which is covered by the existing `Disallow: /admin/` prefix anyway.
+It ended with `Sitemap: https://<host>/sitemap.xml`, and there is no such
+route, so crawlers got a 404. The line is gone. A test now checks that any
+`Sitemap:` line in `robots.txt` points at a URL that resolves, so adding a real
+sitemap later is fine as long as the two arrive together. `/admin/combined-invoices/`
+is covered by the existing `Disallow: /admin/` prefix.
 
-**Recommendation:** drop the `Sitemap:` line, or add a sitemap.
+### 6. Admin-edited page bodies render as HTML — *accepted for now*
 
-### 6. Admin-edited page bodies render as HTML — *decision needed*
+**Decision (client):** keep HTML rendering. The trade-off below stands and
+the README documents it; revisit if staff accounts are ever widened beyond the
+current trusted group.
 
 `SitePage.body` (About Us, Terms, Privacy) and `FAQItem.answer` render with
 `|safe`, so an admin can write headings, lists and links. Only staff can edit
@@ -97,7 +106,10 @@ as visible tags and it needs rewriting as plain prose. Flagged in the content
 pages batch; restated here because it is the one deliberate `|safe` on
 public-facing pages.
 
-### 7. Phone numbers are visible to every staff account — *decision needed*
+### 7. Phone numbers are visible to every staff account — *accepted*
+
+**Decision (client):** every staff account is trusted with shipping details;
+leave the changelist as is.
 
 `UserProfileAdmin` lists `phone_number` on the changelist, and the change form
 shows `address`. Any account with `is_staff` sees them. Staff coordinate
@@ -109,7 +121,10 @@ appear on the member's own profile page and nowhere public (tested).
 shipping details, which for a club of this size is likely. If not, drop
 `phone_number` from `list_display` and the field stays on the change form only.
 
-### 8. Where buyer and seller email addresses travel — *for awareness*
+### 8. Where buyer and seller email addresses travel — *deferred*
+
+**Decision (client):** to be looked at again later. No change made; the two
+places are listed below so the follow-up starts from the right lines.
 
 Two places show one party's email to the other, both intentional:
 
@@ -210,7 +225,7 @@ The brief covers several systems that were never built here:
 
 ```bash
 cd auction_site
-python manage.py test auctions.tests.test_security_audit   # 23 checks
+python manage.py test auctions.tests.test_security_audit   # 25 checks
 python manage.py check --deploy
 pip-audit -r ../requirements.txt
 ```
