@@ -19,6 +19,7 @@ from django.test import (
     TransactionTestCase,
     override_settings,
 )
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
@@ -423,6 +424,108 @@ class BuyNowOversellGuardTests(TestCase):
         self.assertEqual(listing.quantity_remaining, 0)
         self.assertTrue(listing.is_closed)
         self.assertEqual(Invoice.objects.filter(listing=listing).count(), 2)
+
+
+@skipUnless(
+    connection.features.has_select_for_update_of,
+    'Asserts the shape of a FOR UPDATE clause, which only a backend that '
+    'emits one can show. SQLite drops the clause entirely.',
+)
+@override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
+class RowLockScopeTests(TestCase):
+    """
+    The purchase lock must name the listing table and nothing else.
+
+    This is the bug that took Buy It Now down on the production PostgreSQL
+    database while the whole suite passed on SQLite. The view locks the listing
+    and select_related's the seller's profile in the same query. That profile
+    hangs off a reverse one-to-one, which Django renders as a LEFT OUTER JOIN,
+    and PostgreSQL refuses to lock the nullable side of an outer join:
+
+        FOR UPDATE cannot be applied to the nullable side of an outer join
+
+    SQLite reports has_select_for_update = False and silently drops the clause,
+    so every one of these tests passed there while no purchase could complete
+    in production.
+
+    Scoping the lock also stops it spreading to the seller's User and profile
+    rows, which would make two buyers of two different listings from the same
+    seller queue behind each other.
+    """
+
+    def setUp(self):
+        self.category = AuctionCategory.objects.create(name='Daylilies')
+        self.seller = make_seller('lockseller', first_name='Lock', last_name='Seller')
+        now = timezone.now()
+        self.listing = AuctionListing.objects.create(
+            title='Locked Daylily',
+            category=self.category,
+            seller=self.seller,
+            start_price='10.00',
+            listing_type='buy_now',
+            buy_now_price='25.00',
+            quantity_available=2,
+            shipping_mode='flat',
+            starts_at=now - timedelta(days=1),
+            ends_at=now + timedelta(days=7),
+            is_active=True,
+        )
+        buyer = User.objects.create_user('lockbuyer', 'lockbuyer@example.com', 'pw')
+        Subscription.objects.create(user=buyer, plan='monthly', status='active')
+        buyer.profile.country = 'US'
+        buyer.profile.save(update_fields=['country'])
+        self.client.force_login(buyer)
+
+    @staticmethod
+    def _locking_selects(captured):
+        return [
+            q['sql'] for q in captured.captured_queries
+            if 'FOR UPDATE' in q['sql'].upper()
+        ]
+
+    def test_a_purchase_locks_only_the_listing_row(self):
+        """Drives the real view rather than a replica of its queryset."""
+        with CaptureQueriesContext(connection) as captured:
+            self.client.post(
+                reverse('buy_now', kwargs={'pk': self.listing.pk}), {'quantity': 1}
+            )
+
+        locking = self._locking_selects(captured)
+        self.assertEqual(
+            len(locking), 1, f'expected exactly one locking read, got {locking}'
+        )
+        sql = locking[0].upper()
+        self.assertIn('FOR UPDATE OF', sql)
+        self.assertIn('AUCTIONS_AUCTIONLISTING', sql)
+        # The join is still in the query; it just must not be locked.
+        for table in ('AUCTIONS_USERPROFILE', 'AUTH_USER'):
+            with self.subTest(table=table):
+                self.assertNotIn(table, sql.split('FOR UPDATE OF')[1])
+
+    def test_the_purchase_actually_completes(self):
+        """The lock is only correct if the purchase it guards still goes through."""
+        self.client.post(
+            reverse('buy_now', kwargs={'pk': self.listing.pk}), {'quantity': 1}
+        )
+
+        self.listing.refresh_from_db()
+        self.assertEqual(self.listing.quantity_remaining, 1)
+        self.assertEqual(Invoice.objects.filter(listing=self.listing).count(), 1)
+
+    def test_the_scheduled_close_locks_only_the_listing_row(self):
+        """The closing job builds the same lock, and had the same bug."""
+        AuctionListing.objects.filter(pk=self.listing.pk).update(
+            ends_at=timezone.now() - timedelta(hours=1)
+        )
+
+        with CaptureQueriesContext(connection) as captured:
+            call_command('close_ended_auctions', stdout=StringIO())
+
+        locking = self._locking_selects(captured)
+        self.assertTrue(locking, 'the closing job took no row lock at all')
+        for sql in locking:
+            with self.subTest(sql=sql):
+                self.assertIn('FOR UPDATE OF', sql.upper())
 
 
 @skipUnless(

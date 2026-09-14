@@ -97,9 +97,16 @@ class Command(BaseCommand):
         """
         # Re-fetch with a row lock — the second worker will block here until
         # the first worker's transaction commits, then see is_closed=True and bail.
+        #
+        # of=('self',) confines the lock to the listing row. select_related
+        # here follows a reverse one-to-one to the seller's profile, which is a
+        # LEFT OUTER JOIN, and PostgreSQL will not lock the nullable side of
+        # one. It also keeps one seller's closing listing from locking that
+        # seller's User row against every other listing of theirs closing in
+        # the same sweep. See the matching note in BuyNowView.
         listing = (
             AuctionListing.objects
-            .select_for_update()
+            .select_for_update(of=('self',))
             .select_related('seller__profile')
             .get(pk=listing.pk)
         )

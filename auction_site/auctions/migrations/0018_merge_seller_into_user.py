@@ -46,6 +46,33 @@ def wipe_auction_data(apps, schema_editor):
             print(f'  0018: deleted {deleted} {label} row(s)')
 
 
+def flush_deferred_constraint_checks(apps, schema_editor):
+    """
+    Make PostgreSQL run the foreign-key checks the wipe above just queued.
+
+    Django declares foreign keys DEFERRABLE INITIALLY DEFERRED, so deleting
+    rows does not check referential integrity there and then — it queues the
+    checks to run at COMMIT. A migration is a single transaction, so by the
+    time the AlterField below tries to rebuild AuctionListing's seller
+    constraint those checks are still outstanding, and PostgreSQL refuses to
+    touch a table that has any:
+
+        cannot ALTER TABLE "auctions_auctionlisting"
+        because it has pending trigger events
+
+    check_constraints() issues SET CONSTRAINTS ALL IMMEDIATE and then
+    SET CONSTRAINTS ALL DEFERRED, which drains the queue and restores the
+    normal deferred behaviour for the rest of the migration.
+
+    This is a no-op in effect on SQLite, which has neither a deferred-trigger
+    queue nor the ALTER restriction — which is exactly why the failure only
+    appeared on the production database and not in the test suite. It is
+    written against the backend-agnostic Django API rather than raw SQL so it
+    stays correct on both.
+    """
+    schema_editor.connection.check_constraints()
+
+
 def no_restore(apps, schema_editor):
     """
     Reversing gets the schema back, never the deleted rows.
@@ -136,6 +163,13 @@ class Migration(migrations.Migration):
 
         # ── 2. Clear the rows that point at Seller ───────────────────────────
         migrations.RunPython(wipe_auction_data, no_restore),
+
+        # ── 2a. Settle the deletions before reshaping the tables ─────────────
+        # Must sit between the wipe and the AlterFields: PostgreSQL will not
+        # alter a table with foreign-key checks still queued against it.
+        migrations.RunPython(
+            flush_deferred_constraint_checks, migrations.RunPython.noop
+        ),
 
         # ── 3. Re-point the seller columns at User ───────────────────────────
         migrations.AlterField(

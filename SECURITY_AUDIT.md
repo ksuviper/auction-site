@@ -31,7 +31,7 @@ versions:
 | `fido2` | 2.1.1 | **2.2.1** | Not vulnerable itself. Bumped because 2.1.1 pinned `cryptography < 49`, which would have left six of its advisories open. |
 
 After the bumps: `pip-audit` reports *No known vulnerabilities found*, the full
-suite passes (481 tests), `check --deploy` is unchanged, and `makemigrations
+suite passes (484 tests), `check --deploy` is unchanged, and `makemigrations
 --check` finds no drift. `paypalrestsdk` installs unchanged against
 `cryptography` 50.
 

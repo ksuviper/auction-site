@@ -244,6 +244,12 @@ re-pointable — a non-null `seller` cannot be introduced while rows exist with 
 **Take a database backup before applying it.** Afterwards, flag the seller
 accounts as above and re-enter the current week's listings.
 
+The migration is a single atomic transaction, so a failure part-way through
+leaves the database exactly as it was: nothing deleted, no columns added, and
+`0018` absent from `django_migrations`. It is safe to fix the cause and run
+`migrate` again. Confirm with `showmigrations auctions` before retrying — if
+`0018` is unticked, the previous attempt left nothing behind.
+
 ---
 
 ## Invoicing
@@ -923,6 +929,37 @@ verification, admin approval, two-factor authentication), multi-quantity
 Buy It Now stock, and end-to-end integration flows. PayPal API calls, Turnstile
 verification, and webhook signature verification are mocked, so no network or
 credentials are needed.
+
+### Run it against PostgreSQL before you deploy
+
+That command uses SQLite, and **SQLite does not exercise everything production
+does**. It reports `has_select_for_update = False`, so it silently discards
+every row-locking clause instead of running it, and it has neither deferred
+foreign-key checks nor PostgreSQL's restrictions on altering a table. A green
+SQLite run has already hidden two faults that broke a live PostgreSQL
+deployment: a migration that could not alter a table after deleting rows, and a
+purchase query that locked the nullable side of an outer join.
+
+Point the same suite at a PostgreSQL database and the gap closes — the two
+concurrency tests that SQLite skips also start running for real:
+
+```bash
+export DATABASE_ENGINE=django.db.backends.postgresql
+export DATABASE_NAME=asq DATABASE_USER=asq DATABASE_PASSWORD=...
+export DATABASE_HOST=127.0.0.1 DATABASE_PORT=5432
+cd auction_site
+python manage.py test auctions.tests      # 484 tests, 0 skipped
+```
+
+The database user needs permission to create databases, since Django builds a
+throwaway `test_<name>` one. Treat a PostgreSQL run as required before any
+release that touches a migration, a lock, or a raw query.
+
+> **The PostgreSQL driver is not in `requirements.txt`.** A production host
+> needs `psycopg2-binary` (or a source build of `psycopg2`) installed
+> alongside it. It is left out so a SQLite-only development install does not
+> have to build it; if you rebuild a production virtualenv from
+> `requirements.txt` alone, Django will fail to start until you add it.
 
 ---
 

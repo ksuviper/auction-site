@@ -479,8 +479,27 @@ class BuyNowView(LoginRequiredMixin, View):
         with transaction.atomic():
             # Row lock so concurrent purchase attempts serialize — the second
             # one blocks here, then re-reads the stock count below.
+            #
+            # of=('self',) locks the listing row only. Two reasons, and the
+            # first one is not an optimisation:
+            #
+            # 1. select_related('seller__profile') follows a reverse
+            #    one-to-one, which Django renders as a LEFT OUTER JOIN.
+            #    PostgreSQL refuses to lock the nullable side of an outer join
+            #    ("FOR UPDATE cannot be applied to the nullable side of an
+            #    outer join"), so an unqualified lock here makes every Buy It
+            #    Now fail on PostgreSQL. SQLite reports
+            #    has_select_for_update = False and ignores the whole clause,
+            #    which is why the test suite never saw it.
+            # 2. Locking the joined rows would also lock the seller's User and
+            #    profile rows, so two buyers purchasing two *different*
+            #    listings from the same seller would serialise against each
+            #    other for no reason.
+            #
+            # `of` is validated only on backends that support row locking at
+            # all, so it stays inert rather than raising on SQLite.
             listing = get_object_or_404(
-                AuctionListing.objects.select_for_update()
+                AuctionListing.objects.select_for_update(of=('self',))
                 .select_related('seller__profile'),
                 pk=pk,
             )
