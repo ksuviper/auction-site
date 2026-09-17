@@ -26,6 +26,8 @@ from .models import (
     Subscription,
     UserProfile,
     Wishlist,
+    describe_user_activity,
+    user_activity,
 )
 from .services import copy_listing
 
@@ -302,14 +304,56 @@ class UserProfileAdmin(ModelAdmin):
     list_select_related = ('user',)
     search_fields = ('user__username', 'user__email', 'phone_number')
     raw_id_fields = ('user',)
-    # Only the add form renders these now — see change_view. It is the recovery
-    # path for a profile that somehow does not exist, since every account
-    # normally gets one from a signal at signup.
-    fieldsets = ((None, {'fields': ('user',)}),) + PROFILE_FIELDSETS
 
     @admin.display(description='Email', ordering='user__email')
     def user_email(self, obj):
         return obj.user.email or '—'
+
+    def has_add_permission(self, request):
+        """
+        Profiles are made by signup, not by hand.
+
+        A signal creates one with every account, so the only thing this form
+        could produce is a second profile for someone who already has one —
+        which the one-to-one rejects with a database error rather than a usable
+        message — or one attached to nobody. Neither is worth a menu entry.
+        """
+        return False
+
+    # has_delete_permission is deliberately left alone. Returning False here
+    # would not just hide this model's delete button: when the admin works out
+    # what deleting a *user* would take with them, it asks each related model's
+    # admin whether that is allowed, and one "no" refuses the whole thing. So
+    # denying it would make every account permanently undeletable. The two
+    # routes that could delete a profile on its own are closed below instead,
+    # and the model refuses as a backstop.
+
+    def get_actions(self, request):
+        actions = super().get_actions(request)
+        actions.pop('delete_selected', None)
+        return actions
+
+    def delete_view(self, request, object_id, extra_context=None):
+        """
+        Refuse, and point at the account instead.
+
+        Reached only by typing the URL — the change page is a redirect, so no
+        delete button is ever rendered, and the bulk action is gone. Answering
+        with a message beats a 403 or the model's exception, because the person
+        who got here wanted to remove someone and needs telling how.
+        """
+        profile = self.get_object(request, object_id)
+        if profile is None or profile.user_id is None:
+            return super().delete_view(request, object_id, extra_context)
+
+        self.message_user(
+            request,
+            'A profile cannot be deleted on its own — it belongs to the '
+            'account. Delete the user here instead, and the profile goes with '
+            'them.',
+            level=messages.WARNING,
+        )
+        return redirect('admin:auth_user_change', profile.user_id)
 
     def change_view(self, request, object_id, form_url='', extra_context=None):
         """
@@ -925,3 +969,44 @@ class CustomUserAdmin(BaseUserAdmin, ModelAdmin):
     def is_seller(self, obj):
         """Whether this account can be picked when adding a listing."""
         return bool(getattr(getattr(obj, 'profile', None), 'is_seller', False))
+
+    def has_delete_permission(self, request, obj=None):
+        """
+        An account that has traded stays.
+
+        Listings and invoices are already PROTECT, so the database refuses
+        those on its own and the admin explains itself. The ones that needed
+        catching are the quiet ones: bids, automatic bids, comments and
+        membership records all cascade, and the winner of an auction is
+        SET_NULL, so removing a member used to erase their bidding history and
+        blank the winner on listings they had won, with nothing said.
+
+        An account with none of that — someone who signed up and never bid — is
+        still deletable, and takes its profile, wishlist, email addresses and
+        logins with it.
+
+        Returning False here covers every route: it hides the button on the
+        page, and the bulk action checks each selected object the same way.
+        """
+        if obj is None:
+            return super().has_delete_permission(request, obj)
+        return (
+            super().has_delete_permission(request, obj)
+            and not user_activity(obj)
+        )
+
+    def delete_view(self, request, object_id, extra_context=None):
+        """Say what is keeping the account, rather than only refusing."""
+        user = self.get_object(request, object_id)
+        summary = describe_user_activity(user) if user is not None else ''
+        if summary:
+            self.message_user(
+                request,
+                f'{user.get_username()} cannot be deleted: the account has '
+                f'{summary} on record, and removing it would take that history '
+                'with it. Untick "Active" to stop them logging in, or clear '
+                'the records first if they really must go.',
+                level=messages.WARNING,
+            )
+            return redirect('admin:auth_user_change', user.pk)
+        return super().delete_view(request, object_id, extra_context)

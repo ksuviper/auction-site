@@ -836,6 +836,39 @@ actually confirmed, which is the deliberate trade — evicting known members is
 worse. If a particular address looks suspicious, un-verify it in the admin under
 **Accounts → Email addresses** afterwards.
 
+### Deleting an account
+
+**An account that has traded cannot be deleted.** The admin refuses and names
+what is in the way, for example *"2 bids and 1 comment on record"*. What counts:
+
+| Blocks deletion | Goes with the account |
+|---|---|
+| Bids, automatic bids, comments | The profile |
+| Listings as seller, won auctions | Wishlist entries |
+| Invoices and combined invoices, either side | Email addresses, social logins |
+| Membership records | Two-factor devices, admin log entries |
+
+Listings and invoices were already `PROTECT`, so the database refused those on
+its own. The rest is why this exists: bids, comments and membership records
+cascade, and the winner of an auction is `SET_NULL`, so deleting a member used
+to erase their bidding history and blank the winner on listings they had won,
+saying nothing about it.
+
+An account with none of that — someone who signed up and never bid — still
+deletes normally and takes its profile with it.
+
+To stop someone using the site without destroying the record, untick **Active**
+on their user page. That is the usual answer; outright deletion is for accounts
+that never did anything. If a member asks for their data to be removed through
+the Data Deletion page at `/privacy/data-deletion/`, that is a conversation
+about what can be anonymised rather than a delete button, because the club's
+bidding and invoice records are not only theirs.
+
+**Profiles cannot be deleted or created by hand at all.** One is made with every
+account by a signal, the rest of the code reads `user.profile` without checking,
+and a missing one leaves an account that cannot be approved. The admin has no
+add page and no delete action, and the model refuses as a backstop.
+
 ---
 
 ## Background Scheduler

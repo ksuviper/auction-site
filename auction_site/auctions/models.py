@@ -199,6 +199,30 @@ class UserProfile(models.Model):
 
         return active_listings(seller=self.user)
 
+    def delete(self, *args, **kwargs):
+        """
+        A profile is never removed on its own — only with its account.
+
+        Every account has exactly one, created by a signal at signup, and the
+        rest of the code reads ``user.profile`` without checking it is there.
+        Deleting one leaves an account that cannot be approved, shows "No
+        profile" in the admin and breaks on any page that asks for a country or
+        a seller flag.
+
+        Since the link to the account is non-null, there is no such thing as a
+        profile whose user has already gone: the cascade takes it at the same
+        moment. So this refuses unconditionally rather than testing for it.
+
+        Deleting the account still works and still takes the profile with it.
+        Cascades are collected and deleted in SQL by the ORM rather than by
+        calling this method, so nothing here stands in the way of that — there
+        is a test that deletes a user and checks the profile goes too.
+        """
+        raise ProfileDeletionNotAllowed(
+            'A profile belongs to its account and cannot be deleted by itself. '
+            'Delete the user instead, which removes the profile with it.'
+        )
+
     def __str__(self) -> str:
         return f'Profile – {self.user.username}'
 
@@ -927,3 +951,63 @@ class Subscription(models.Model):
 
     def __str__(self) -> str:
         return f'{self.user.username} – {self.get_plan_display()} ({self.status})'
+
+
+# ── Deleting accounts ────────────────────────────────────────────────────────
+
+class ProfileDeletionNotAllowed(Exception):
+    """Raised when something tries to delete a profile on its own."""
+
+
+def user_activity(user):
+    """
+    What this account has done that must outlive it.
+
+    Returns ``[(label, count)]`` for every kind of record that makes an account
+    undeletable, empty when there is nothing. Used by the admin to refuse the
+    deletion and to say what is in the way.
+
+    Five of these relations are already ``PROTECT``, so the database would stop
+    the delete on its own. The dangerous ones are the rest: bids, automatic
+    bids, comments and membership records all ``CASCADE``, and a won auction is
+    ``SET_NULL``, so deleting a member would quietly erase their bidding
+    history and blank the winner on listings they had bought. That silence is
+    the reason this check exists rather than leaving it to the constraints.
+
+    Deliberately not listed, because these belong to the account rather than to
+    the club's records and should go when it does: the profile itself, wishlist
+    entries, email addresses, social logins, MFA authenticators and admin log
+    entries.
+    """
+    if user is None or user.pk is None:
+        return []
+
+    counted = (
+        ('bid', Bid.objects.filter(bidder=user)),
+        ('automatic bid', ProxyBid.objects.filter(bidder=user)),
+        ('comment', ListingComment.objects.filter(author=user)),
+        ('listing as seller', AuctionListing.objects.filter(seller=user)),
+        ('won auction', AuctionListing.objects.filter(winner=user)),
+        ('invoice as buyer', Invoice.objects.filter(buyer=user)),
+        ('invoice as seller', Invoice.objects.filter(seller=user)),
+        ('combined invoice as buyer', CombinedInvoice.objects.filter(buyer=user)),
+        (
+            'combined invoice as seller',
+            CombinedInvoice.objects.filter(seller=user),
+        ),
+        ('membership record', Subscription.objects.filter(user=user)),
+    )
+    return [(label, found) for label, qs in counted if (found := qs.count())]
+
+
+def describe_user_activity(user):
+    """The same thing as a phrase, for a message to an admin."""
+    parts = [
+        f'{count} {label}{"" if count == 1 else "s"}'
+        for label, count in user_activity(user)
+    ]
+    if not parts:
+        return ''
+    if len(parts) == 1:
+        return parts[0]
+    return ', '.join(parts[:-1]) + f' and {parts[-1]}'

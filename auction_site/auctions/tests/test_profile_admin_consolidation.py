@@ -144,17 +144,19 @@ class OneEditingSurfaceTests(TestCase):
         self.assertTrue(self.member.profile.is_seller)
         self.assertEqual(self.member.profile.venmo_info, '@handle')
 
-    def test_the_two_surfaces_cannot_drift(self):
+    def test_the_inline_is_the_only_definition_of_the_layout(self):
         """
-        Both render the same definition, so a field added to one is on the
-        other. The add form additionally names the account it belongs to.
+        There is nothing left to drift from. The profile admin renders no form
+        at all now — its change page redirects and its add page is gone — so
+        the shared definition has exactly one consumer.
         """
-        add_form_names = fieldset_names(UserProfileAdmin.fieldsets)
+        self.assertEqual(UserProfileInline.fieldsets, PROFILE_FIELDSETS)
 
-        self.assertEqual(
-            add_form_names,
-            ['user'] + fieldset_names(PROFILE_FIELDSETS),
-        )
+        profile_admin = UserProfileAdmin(UserProfile, AdminSite())
+        request = RequestFactory().get('/admin/')
+        request.user = self.staff
+
+        self.assertFalse(profile_admin.has_add_permission(request))
 
 
 class TheListStillDoesItsJobTests(TestCase):
