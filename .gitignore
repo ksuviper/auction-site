@@ -17,11 +17,20 @@ __pycache__/
 .env.local
 .env.*.local
 
-# Uploaded media — keep the folder structure but not the files.
-# Every upload_to prefix needs a line here; site/ arrived with SiteSettings.
-media/listings/*
-!media/listings/.gitkeep
-media/site/*
+# Uploaded media — never commit anything a user or admin uploaded.
+#
+# Leading **/ on purpose. MEDIA_ROOT is auction_site/media/, and a pattern with
+# a slash inside it is anchored to this file's directory, so the previous
+# "media/listings/*" only ever matched a media/ folder at the repository root —
+# which does not exist. Nothing had been committed yet, but every listing photo
+# and site image sat there as an untracked file waiting to be swept into a
+# commit by an absent-minded "git add .".
+#
+# The directory itself is matched at any depth, so this keeps working if the
+# project layout moves, and no per-upload_to line is needed when a new image
+# field is added.
+**/media/
+
 
 # Archives
 *.zip

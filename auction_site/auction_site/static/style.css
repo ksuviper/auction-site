@@ -291,15 +291,55 @@ a:hover {
 
 /* ── Listing detail ──────────────────────────────────────────────────────── */
 
+/*
+ * The whole photo, never cropped.
+ *
+ * This used to be a fixed 420px box with object-fit: cover, which fills the box
+ * and throws away whatever does not fit — so a tall plant lost its bloom or its
+ * base depending on where the crop landed. On the grid that trade is worth it,
+ * because even thumbnails keep the cards aligned; here it is not, because this
+ * is the page where somebody decides whether to bid on the plant.
+ *
+ * Caps rather than fixed sizes: max-width keeps a wide photo inside the column,
+ * max-height stops a tall one pushing the bid panel off the screen, and with
+ * both dimensions auto the element sizes itself to whichever cap it meets
+ * first. So the box always matches the photo's own proportions — a tall plant
+ * comes out narrow and centred rather than cropped, and nothing is ever
+ * stretched or letterboxed into grey bars.
+ *
+ * object-fit and the background colour are belt and braces for anything that
+ * forces a different box on this element later; at these rules they never show.
+ * Small photos are left at their own size rather than blown up, since upscaling
+ * a 400px snapshot to fill the column only makes it blurry.
+ */
 .listing-detail-img {
-    height: 420px;
+    display: block;
+    margin-inline: auto;
+    max-width: 100%;
+    max-height: 30rem;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    background-color: #f8f9fa;
+}
+
+/*
+ * The "no photo" version is an empty box holding a centred icon, so unlike the
+ * photo it does need a height of its own — with height: auto it would collapse
+ * to the height of the icon.
+ */
+.listing-detail-placeholder {
     width: 100%;
-    object-fit: cover;
+    height: 22rem;
 }
 
 @media (max-width: 767.98px) {
     .listing-detail-img {
-        height: 260px;
+        max-height: 20rem;
+    }
+
+    .listing-detail-placeholder {
+        height: 16rem;
     }
 }
 
