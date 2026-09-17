@@ -38,6 +38,61 @@ PAYMENT_FIELD_NAMES = tuple(
 ) + ('seller_payment_methods',)
 
 
+# How a profile is laid out for editing. Defined once because it is rendered in
+# two contexts — inline on the user page, which is where people actually edit a
+# profile, and on the profile model's own add form, which exists only to rebuild
+# a profile that went missing. They must not drift apart: an admin who edits
+# someone should see the same fields and the same guidance either way.
+#
+# The group descriptions matter as much as the fields. "Is seller" and the
+# payment boxes are meaningless without them, and the person filling them in has
+# no other documentation in front of them.
+PROFILE_FIELDSETS = (
+    (
+        'Account',
+        {
+            # is_approved first: whether this person can log in at all is the
+            # most consequential thing on the page. Ticking it here emails them,
+            # same as the changelist action — see notify_user_of_approval in
+            # signals.py.
+            'fields': (
+                'is_approved', 'subscription_required',
+                'email_login_code_enabled',
+            ),
+        },
+    ),
+    ('Contact', {'fields': ('phone_number', 'country', 'address', 'notes')}),
+    (
+        'Seller details',
+        {
+            'fields': (
+                'is_seller', 'seller_category', 'seller_active_week',
+                'seller_bio', 'seller_shipping_fee',
+                'seller_notify_on_comments',
+            ),
+            'description': (
+                'Only used when "Is seller" is ticked. Sellers can be chosen '
+                'when adding a listing and get a read-only sales dashboard; '
+                'they cannot create or edit listings themselves.'
+            ),
+        },
+    ),
+    (
+        'Payment methods',
+        {
+            'fields': PAYMENT_FIELD_NAMES,
+            'description': (
+                'How buyers pay this seller. Free text — a handle, a link, an '
+                'email or a phone number, whatever the seller wants shown. '
+                'Leave a method blank if they do not accept it. Buyers see '
+                'these details on their invoice; the public seller page lists '
+                'only which methods are accepted.'
+            ),
+        },
+    ),
+)
+
+
 class BuyNowStockFilter(admin.SimpleListFilter):
     """Filter Buy It Now listings by whether any units are left.
 
@@ -247,45 +302,42 @@ class UserProfileAdmin(ModelAdmin):
     list_select_related = ('user',)
     search_fields = ('user__username', 'user__email', 'phone_number')
     raw_id_fields = ('user',)
-    # Seller details are grouped and labelled so it is obvious they only matter
-    # once "Is seller" is ticked — they are inert on a buyer's profile.
-    fieldsets = (
-        (None, {'fields': ('user', 'is_approved', 'subscription_required')}),
-        ('Contact', {'fields': ('phone_number', 'country', 'address', 'notes')}),
-        (
-            'Seller details',
-            {
-                'fields': (
-                    'is_seller', 'seller_category', 'seller_active_week',
-                    'seller_bio', 'seller_shipping_fee',
-                    'seller_notify_on_comments',
-                ),
-                'description': (
-                    'Only used when "Is seller" is ticked. Sellers can be '
-                    'chosen when adding a listing and get a read-only sales '
-                    'dashboard; they cannot create or edit listings themselves.'
-                ),
-            },
-        ),
-        (
-            'Payment methods',
-            {
-                'fields': PAYMENT_FIELD_NAMES,
-                'description': (
-                    'How buyers pay this seller. Free text — a handle, a link, '
-                    'an email or a phone number, whatever the seller wants '
-                    'shown. Leave a method blank if they do not accept it. '
-                    'Buyers see these details on their invoice; the public '
-                    'seller page lists only which methods are accepted.'
-                ),
-            },
-        ),
-        ('Login & security', {'fields': ('email_login_code_enabled',)}),
-    )
+    # Only the add form renders these now — see change_view. It is the recovery
+    # path for a profile that somehow does not exist, since every account
+    # normally gets one from a signal at signup.
+    fieldsets = ((None, {'fields': ('user',)}),) + PROFILE_FIELDSETS
 
     @admin.display(description='Email', ordering='user__email')
     def user_email(self, obj):
         return obj.user.email or '—'
+
+    def change_view(self, request, object_id, form_url='', extra_context=None):
+        """
+        Send anyone opening a profile to the account it belongs to.
+
+        A profile is one-to-one with a user and was editable in two places: here
+        and inline on the user page, 19 of its 21 fields identical on both. Two
+        forms over one record is a way to lose an edit, and nothing on either
+        page said they were the same thing.
+
+        The list this sits behind is kept, because it is the only place bulk
+        approval works: list_editable only accepts fields of the model being
+        listed, and is_approved lives on the profile rather than on User, so the
+        user changelist cannot offer those checkboxes. So the list stays as the
+        approval queue and the seller roster, and the row you click takes you to
+        the one page that edits a person.
+
+        Permissions are deliberately untouched — revoking change permission here
+        would disable the tick-in-place editing and the bulk actions that are
+        the whole reason this admin still exists.
+        """
+        profile = self.get_object(request, object_id)
+        if profile is None or profile.user_id is None:
+            # Unknown id, or a profile with no account: fall through so the
+            # admin renders its own "does not exist" page rather than 500ing on
+            # a reverse() with None.
+            return super().change_view(request, object_id, form_url, extra_context)
+        return redirect('admin:auth_user_change', profile.user_id)
 
 
 class SellerFilter(admin.SimpleListFilter):
@@ -829,14 +881,12 @@ class UserProfileInline(StackedInline):
     max_num = 1
     extra = 0
     verbose_name_plural = 'Profile'
-    # is_approved first: whether this person can log in at all is the most
-    # consequential thing on the page. Ticking it here emails them, same as the
-    # changelist action — see notify_user_of_approval in signals.py.
-    fields = (
-        'is_approved', 'is_seller', 'subscription_required', 'phone_number',
-        'country', 'address', 'notes', 'seller_category', 'seller_active_week',
-        'seller_bio', 'seller_shipping_fee', 'seller_notify_on_comments',
-    ) + PAYMENT_FIELD_NAMES
+    # The single place a profile is edited, so it carries the whole thing —
+    # including the login-code toggle, which used to be reachable only from the
+    # profile's own page and was therefore stranded when that page became a
+    # redirect. Grouped and captioned rather than a flat list of twenty-one
+    # boxes; the descriptions are the only guidance an admin gets.
+    fieldsets = PROFILE_FIELDSETS
 
 
 # Replace the default auth User admin so the profile (and its

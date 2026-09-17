@@ -360,7 +360,11 @@ class PendingQueueDiscoverabilityTests(TestCase):
             for item in group['items']
         ]
         self.assertIn('/admin/auctions/userprofile/?approval=pending', links)
-        self.assertIn('/admin/auctions/userprofile/', links)
+        # Only the filtered views of the profile list are in the sidebar now.
+        # The unfiltered entry was removed: a profile is edited on its account's
+        # page, so a second door to the same people only invited the question of
+        # which one to use. See test_profile_admin_consolidation.
+        self.assertNotIn('/admin/auctions/userprofile/', links)
 
     def test_sidebar_badge_path_is_importable(self):
         """A bad dotted path is swallowed by unfold, so assert it resolves."""
@@ -396,7 +400,12 @@ class PendingQueueDiscoverabilityTests(TestCase):
         response = self.client.get(f'/admin/auth/user/{target.pk}/change/')
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn('is_approved', UserProfileInline.fields)
+        inline_fields = [
+            name
+            for _label, opts in UserProfileInline.fieldsets
+            for name in opts['fields']
+        ]
+        self.assertIn('is_approved', inline_fields)
         self.assertContains(response, 'is_approved')
 
     def test_user_changelist_shows_approval_status(self):

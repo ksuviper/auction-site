@@ -227,19 +227,23 @@ class PaymentAdminTests(PaymentFixtureMixin, TestCase):
         )
         self.client.force_login(staff)
 
-    def test_the_profile_page_groups_them_under_payment_methods(self):
-        url = reverse(
-            'admin:auctions_userprofile_change', args=[self.seller.profile.pk]
-        )
+    def test_the_user_page_groups_them_under_payment_methods(self):
+        """
+        The grouping and its caption used to live on the profile's own page.
+        That page is a redirect now, so the user page has to carry them — an
+        admin has no other explanation of what these boxes are for.
+        """
+        url = reverse('admin:auth_user_change', args=[self.seller.pk])
 
         response = self.client.get(url)
 
         self.assertContains(response, 'Payment methods')
+        self.assertContains(response, 'Buyers see')
         for field in ('venmo_info', 'paypal_info', 'cashapp_info',
                       'apple_pay_info', 'google_pay_info', 'zelle_info'):
-            self.assertContains(response, f'name="{field}"')
+            self.assertContains(response, field)
 
-    def test_they_are_editable_from_the_user_page_too(self):
+    def test_they_are_editable_from_the_user_page(self):
         """Flagging a seller and filling these in should be one visit."""
         url = reverse('admin:auth_user_change', args=[self.seller.pk])
 

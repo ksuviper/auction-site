@@ -417,11 +417,13 @@ UNFOLD = {
                         "badge": "auctions.admin.pending_approval_count",
                         "badge_variant": "warning",
                     },
-                    {
-                        "title": "User Profiles",
-                        "icon": "badge",
-                        "link": reverse_lazy("admin:auctions_userprofile_changelist"),
-                    },
+                    # No unfiltered "User Profiles" entry. A profile is one per
+                    # account and is edited on the account's own page, so a
+                    # second door to the same people only raised the question of
+                    # which one to use. The profile changelist is still reached
+                    # from here, but only through the two filtered views that do
+                    # a job: Pending Approval above, and Sellers in the catalogue
+                    # group.
                     {
                         "title": "Subscriptions",
                         "icon": "card_membership",

@@ -91,7 +91,7 @@ With `DEBUG=True` the default console email backend prints signup verification
 links straight to the terminal, and Cloudflare Turnstile is skipped when
 `TURNSTILE_SECRET` is unset — so registration works out of the box locally.
 Accounts you register locally still need approving before they can log in: tick
-**Is approved** for them in the admin under **User profiles**. See
+**Is approved** for them in the admin under **Users → Pending Approval**. See
 [Registration Security](#registration-security) before deploying.
 
 ### 5. Apply database migrations
@@ -219,8 +219,15 @@ touching the fields directly:
 ### Making someone a seller
 
 In the admin, open the user (**Users → Users**, or **Auctions → Sellers** for
-the profiles already flagged), tick **Is seller**, and fill in the shipping fee
+the accounts already flagged), tick **Is seller**, and fill in the shipping fee
 and payment details. They become selectable on the Add Listing page immediately.
+
+> **Everything about a person is edited on their user page.** Approval, contact
+> details, seller settings and payment handles all live in the **Profile**
+> section there. The profile used to have a second edit page of its own, with
+> nearly every field duplicated; opening one now takes you to the account it
+> belongs to. The profile list survives only as the two filtered worklists in
+> the sidebar, **Sellers** and **Pending Approval**.
 
 **Sellers do not create or edit their own listings** — an admin does, through
 Add Listing. What sellers get instead is a read-only dashboard at
@@ -764,13 +771,17 @@ Where approval shows up in the admin:
 - The **Users** list has an **Approval** column — *Awaiting approval*,
   *Approved*, or *Exempt (staff)* — and a filter on approval state. Opening a
   user shows an **Is approved** checkbox in their Profile section.
-- **Users → User Profiles** is the full list, with the registered email shown
-  (the username allauth derives at signup identifies nobody), an **Approval
-  status** filter, and an inline **Is approved** toggle.
+- The **Pending Approval** queue shows the registered email (the username
+  allauth derives at signup identifies nobody), an **Approval status** filter,
+  and an inline **Is approved** toggle. It is a view of the profile list, which
+  is kept for exactly this reason: Django's tick-in-the-list editing only works
+  on fields of the model being listed, and **Is approved** lives on the profile
+  rather than on the user record, so the Users list cannot offer those
+  checkboxes. Clicking a row opens the person's user page.
 
 Three ways to approve, all equivalent:
 
-- Flip the **Is approved** toggle inline on the User profiles list.
+- Flip the **Is approved** toggle inline on the Pending Approval queue.
 - Tick **Is approved** on a user's page.
 - Select rows and run **Approve selected account(s) and notify the user**.
 
