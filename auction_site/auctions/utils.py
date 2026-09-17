@@ -212,3 +212,84 @@ def verify_turnstile(token, remote_ip=None) -> bool:
         result.get('error-codes', []),
     )
     return False
+
+
+# ── Subscription pricing ─────────────────────────────────────────────────────
+
+class PayPalPriceUpdateError(Exception):
+    """Raised when PayPal refuses a price change, with a reason to show staff."""
+
+
+def update_paypal_plan_price(plan, new_price):
+    """
+    Push a new price onto the PayPal billing plan behind ``plan``.
+
+    Changing the number in our database on its own does nothing: PayPal keeps
+    its own copy on the billing plan and charges from that, so the two have to
+    move together or the site advertises one figure while PayPal collects
+    another.
+
+        POST /v1/billing/plans/{id}/update-pricing-schemes   ->  204 No Content
+
+    ``billing_cycle_sequence: 1`` is the plan's regular cycle. These plans have
+    no trial, so there is only ever the one sequence to reprice.
+
+    **This reaches existing members**, not only new signups: PayPal applies the
+    new price to everyone on the plan from their next billing date. That is why
+    the caller refuses to save on failure rather than logging and carrying on —
+    a silent failure leaves staff believing they changed what members pay when
+    they did not.
+
+    Raises PayPalPriceUpdateError with something worth showing an admin.
+    Returns True on success.
+    """
+    from .paypal import PayPalError, paypal_request
+
+    if not plan.paypal_plan_id:
+        raise PayPalPriceUpdateError(
+            'This plan has no PayPal plan ID yet, so there is nothing to '
+            'update. Run `manage.py create_paypal_plans` first.'
+        )
+
+    payload = {
+        'pricing_schemes': [
+            {
+                'billing_cycle_sequence': 1,
+                'pricing_scheme': {
+                    'fixed_price': {
+                        'value': str(new_price),
+                        'currency_code': plan.currency,
+                    },
+                },
+            },
+        ],
+    }
+
+    try:
+        response = paypal_request(
+            'POST',
+            f'/v1/billing/plans/{plan.paypal_plan_id}/update-pricing-schemes',
+            json=payload,
+        )
+    except PayPalError as exc:
+        logger.exception('PayPal auth failed updating plan pricing')
+        raise PayPalPriceUpdateError(f'Could not reach PayPal: {exc}') from exc
+    except Exception as exc:
+        logger.exception('Unexpected failure updating plan pricing')
+        raise PayPalPriceUpdateError(f'Could not reach PayPal: {exc}') from exc
+
+    if response.status_code not in (200, 204):
+        logger.error(
+            'PayPal rejected a price update for plan %s (%s): %s',
+            plan.paypal_plan_id, response.status_code, response.text,
+        )
+        raise PayPalPriceUpdateError(
+            f'PayPal rejected the change ({response.status_code}): '
+            f'{response.text[:300]}'
+        )
+
+    logger.info(
+        'PayPal plan %s repriced to %s %s',
+        plan.paypal_plan_id, plan.currency, new_price,
+    )
+    return True

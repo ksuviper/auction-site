@@ -30,7 +30,7 @@ from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import TemplateView
 
-from .models import Subscription
+from .models import Subscription, SubscriptionPlan
 from .paypal import PayPalError, paypal_request
 from .utils import _safe_send
 
@@ -48,26 +48,45 @@ def _ensure_paypal_configured():
 
 
 class SubscribeLandingView(LoginRequiredMixin, TemplateView):
-    """Show plan options, or the current membership state if one exists."""
+    """
+    Show plan options, or the current membership state if one exists.
+
+    Which plans depends on the account: a seller-flagged member is offered the
+    seller rate and nobody is offered both. Prices come from SubscriptionPlan
+    rather than from settings, so an admin price change is live immediately.
+
+    Seller pricing may not be set up yet. Rather than showing a blank figure or
+    a checkout that cannot complete, the page says so — see `plans_unavailable`.
+    """
 
     template_name = 'subscriptions/landing.html'
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         subscription = getattr(self.request.user, 'subscription', None)
+        audience = SubscriptionPlan.audience_for(self.request.user)
+        plans = SubscriptionPlan.offered_to(self.request.user)
 
-        try:
-            monthly = float(settings.PAYPAL_MONTHLY_PRICE)
-            yearly = float(settings.PAYPAL_YEARLY_PRICE)
-            savings = round(monthly * 12 - yearly, 2)
-        except (TypeError, ValueError):
-            savings = None
+        monthly = plans.get('monthly')
+        yearly = plans.get('yearly')
+
+        savings = None
+        if monthly and yearly:
+            # Both are Decimal, so this stays exact rather than drifting the
+            # way float arithmetic on money does.
+            difference = (monthly.price * 12) - yearly.price
+            savings = difference if difference > 0 else None
 
         ctx.update({
             'subscription': subscription,
-            'monthly_price': settings.PAYPAL_MONTHLY_PRICE,
-            'yearly_price': settings.PAYPAL_YEARLY_PRICE,
+            'audience': audience,
+            'is_seller_pricing': audience == 'seller',
+            'monthly_plan': monthly,
+            'yearly_plan': yearly,
+            'monthly_price': monthly.price if monthly else None,
+            'yearly_price': yearly.price if yearly else None,
             'yearly_savings': savings,
+            'plans_unavailable': not plans,
         })
         return ctx
 
@@ -79,16 +98,17 @@ class SubscribeCreateView(LoginRequiredMixin, View):
         if plan not in ('monthly', 'yearly'):
             return HttpResponseBadRequest('Invalid plan.')
 
-        plan_id = (
-            settings.PAYPAL_MONTHLY_PLAN_ID if plan == 'monthly'
-            else settings.PAYPAL_YEARLY_PLAN_ID
-        )
-        if not plan_id:
+        # Looked up by audience as well as billing cycle, so a seller is sent
+        # to the seller plan even if they reached this URL directly.
+        chosen = SubscriptionPlan.offered_to(request.user).get(plan)
+        if chosen is None:
             messages.error(
                 request,
-                'Memberships are temporarily unavailable. Please try again later.',
+                'That membership is not available right now. '
+                'Please contact us and we will sort it out.',
             )
             return redirect('subscribe')
+        plan_id = chosen.paypal_plan_id
 
         payload = {
             'plan_id': plan_id,
@@ -128,6 +148,10 @@ class SubscribeCreateView(LoginRequiredMixin, View):
             user=request.user,
             defaults={
                 'plan': plan,
+                # Recorded from the seller flag as it stands now. Flagging
+                # someone a seller later does not reprice a membership they
+                # already hold, so this is what they actually signed up on.
+                'plan_audience': chosen.audience,
                 'status': 'pending',
                 'paypal_subscription_id': data.get('id'),
                 'paypal_plan_id': plan_id,
@@ -200,10 +224,19 @@ class SubscribeReturnView(LoginRequiredMixin, View):
             subscription.current_period_end.strftime('%B %d, %Y')
             if subscription.current_period_end else 'your next billing date'
         )
+        # A seller pays a different rate, so calling it a "Monthly membership"
+        # when their invoice says Seller Monthly invites a support email.
+        # Selling is arranged with an admin, so there is nothing for them to do
+        # next beyond what a buyer does — hence the same closing line.
+        kind = (
+            f'Seller {subscription.get_plan_display()}'
+            if subscription.plan_audience == 'seller'
+            else subscription.get_plan_display()
+        )
         body = f"""\
 Welcome to ASQ Daylily Auctions!
 
-Your {subscription.get_plan_display()} membership is now active.
+Your {kind} membership is now active.
 
 Next renewal: {renewal}
 

@@ -35,27 +35,107 @@ class Command(BaseCommand):
         product_id = self._create_product(token)
         self.stdout.write(self.style.SUCCESS(f'Product created: {product_id}'))
 
-        monthly_id = self._create_plan(
-            token,
-            product_id,
-            name='ASQ Daylily Monthly Membership',
-            interval_unit='MONTH',
-            price=settings.PAYPAL_MONTHLY_PRICE,
-        )
-        yearly_id = self._create_plan(
-            token,
-            product_id,
-            name='ASQ Daylily Annual Membership',
-            interval_unit='YEAR',
-            price=settings.PAYPAL_YEARLY_PRICE,
-        )
+        # (audience, billing cycle, PayPal plan name, interval, price source)
+        wanted = [
+            ('buyer', 'monthly', 'ASQ Daylily Monthly Membership', 'MONTH',
+             settings.PAYPAL_MONTHLY_PRICE, 'PAYPAL_MONTHLY_PLAN_ID'),
+            ('buyer', 'yearly', 'ASQ Daylily Annual Membership', 'YEAR',
+             settings.PAYPAL_YEARLY_PRICE, 'PAYPAL_YEARLY_PLAN_ID'),
+            ('seller', 'monthly', 'ASQ Daylily Seller Monthly Membership',
+             'MONTH', settings.PAYPAL_SELLER_MONTHLY_PRICE,
+             'PAYPAL_SELLER_MONTHLY_PLAN_ID'),
+            ('seller', 'yearly', 'ASQ Daylily Seller Annual Membership',
+             'YEAR', settings.PAYPAL_SELLER_YEARLY_PRICE,
+             'PAYPAL_SELLER_YEARLY_PLAN_ID'),
+        ]
+
+        created = []
+        skipped = []
+        for audience, cycle, name, interval, raw_price, env_name in wanted:
+            price = self._price(audience, cycle, raw_price)
+            if price is None:
+                # Seller pricing may not have been decided yet. Creating a plan
+                # at a made-up figure would put a real, chargeable price in
+                # front of sellers, so skip it and say so.
+                skipped.append((name, env_name))
+                continue
+
+            plan_id = self._create_plan(
+                token, product_id, name=name, interval_unit=interval,
+                price=price,
+            )
+            self._record(audience, cycle, price, plan_id)
+            created.append((env_name, plan_id))
 
         self.stdout.write('')
-        self.stdout.write(
-            self.style.SUCCESS('Plans created. Copy these into your .env:')
+        if created:
+            self.stdout.write(
+                self.style.SUCCESS(
+                    'Plans created, and Membership Pricing in the admin now '
+                    'holds each price and plan ID. These lines are only needed '
+                    'if you prefer to keep the .env in step as well:'
+                )
+            )
+            for env_name, plan_id in created:
+                self.stdout.write(f'{env_name}={plan_id}')
+
+        for name, env_name in skipped:
+            self.stdout.write(
+                self.style.WARNING(
+                    f'Skipped "{name}" — no price set. Put one in the matching '
+                    f'price env var and re-run, or set it under Membership '
+                    f'Pricing in the admin and run this again to create '
+                    f'{env_name}.'
+                )
+            )
+
+    @staticmethod
+    def _price(audience, cycle, raw_price):
+        """
+        The price to create this plan at: the env var, else the admin row.
+
+        Checking the database too means somebody who has set seller pricing in
+        the admin does not also have to put it in the environment just to get
+        the PayPal plan made.
+        """
+        from decimal import Decimal, InvalidOperation
+
+        from auctions.models import SubscriptionPlan
+
+        if raw_price not in (None, ''):
+            try:
+                return Decimal(str(raw_price))
+            except (InvalidOperation, TypeError, ValueError):
+                pass
+
+        row = SubscriptionPlan.objects.filter(
+            audience=audience, billing_cycle=cycle
+        ).first()
+        if row is not None and row.price > 0:
+            return row.price
+        return None
+
+    @staticmethod
+    def _record(audience, cycle, price, plan_id):
+        """
+        Write the plan back to the admin table.
+
+        The command used to end at printing an ID for somebody to paste into a
+        .env by hand, which is a step to forget. The database is what the site
+        reads now, so this keeps it authoritative and leaves the printed lines
+        as a convenience.
+        """
+        from auctions.models import SubscriptionPlan
+
+        SubscriptionPlan.objects.update_or_create(
+            audience=audience,
+            billing_cycle=cycle,
+            defaults={
+                'price': price,
+                'paypal_plan_id': plan_id,
+                'is_active': True,
+            },
         )
-        self.stdout.write(f'PAYPAL_MONTHLY_PLAN_ID={monthly_id}')
-        self.stdout.write(f'PAYPAL_YEARLY_PLAN_ID={yearly_id}')
 
     def _create_product(self, token):
         resp = paypal_request(

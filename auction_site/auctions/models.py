@@ -997,11 +997,109 @@ class HomePageStep(models.Model):
         return self.title
 
 
+# Who a membership is sold to. Sellers pay a different rate, but the membership
+# itself does nothing different — has_active_subscription() does not look at
+# this, so a seller's membership opens the same gates a buyer's does.
+PLAN_AUDIENCE_CHOICES = [
+    ('buyer', 'Buyer'),
+    ('seller', 'Seller'),
+]
+
+BILLING_CYCLE_CHOICES = [
+    ('monthly', 'Monthly'),
+    ('yearly', 'Yearly'),
+]
+
+
+class SubscriptionPlan(models.Model):
+    """
+    What a membership costs, and which PayPal plan sells it.
+
+    Four rows: buyer and seller, monthly and yearly. Prices used to live in
+    environment variables, which meant a price change was a deploy; they live
+    here so an admin can change one.
+
+    A price here is only half of a price change. PayPal keeps its own copy on
+    the billing plan and charges from that, so the admin pushes the new figure
+    to PayPal and refuses to save if that call fails — see SubscriptionPlanAdmin.
+    A row whose price and last_synced_at disagree is the state to avoid, because
+    it means the site advertises one figure and PayPal collects another.
+    """
+
+    audience = models.CharField(max_length=10, choices=PLAN_AUDIENCE_CHOICES)
+    billing_cycle = models.CharField(max_length=10, choices=BILLING_CYCLE_CHOICES)
+    price = models.DecimalField(
+        max_digits=8, decimal_places=2,
+        help_text=(
+            'Changing this pushes the new price to PayPal before it is saved. '
+            'Existing members are repriced from their next billing date.'
+        ),
+    )
+    currency = models.CharField(max_length=3, default='USD')
+    paypal_plan_id = models.CharField(
+        max_length=100, blank=True,
+        help_text=(
+            'From `manage.py create_paypal_plans`. Without it there is nothing '
+            'to sell and nothing to sync, and this plan is treated as '
+            'unavailable.'
+        ),
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text='Untick to stop offering this plan on the subscribe page.',
+    )
+    last_synced_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text='When this price was last accepted by PayPal.',
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['audience', 'billing_cycle'],
+                name='one_plan_per_audience_and_cycle',
+            ),
+        ]
+        ordering = ['audience', 'billing_cycle']
+        verbose_name = 'Subscription plan'
+
+    @classmethod
+    def audience_for(cls, user):
+        """'seller' for a seller-flagged account, otherwise 'buyer'."""
+        profile = getattr(user, 'profile', None)
+        return 'seller' if getattr(profile, 'is_seller', False) else 'buyer'
+
+    @classmethod
+    def offered_to(cls, user):
+        """
+        The plans this user can actually buy, keyed by billing cycle.
+
+        Only rows that are active and carry a PayPal plan id: one without an id
+        has never been created at PayPal, so offering it would send the buyer to
+        a checkout that cannot exist.
+        """
+        return {
+            plan.billing_cycle: plan
+            for plan in cls.objects.filter(
+                audience=cls.audience_for(user), is_active=True
+            ).exclude(paypal_plan_id='')
+        }
+
+    @property
+    def is_sellable(self):
+        return self.is_active and bool(self.paypal_plan_id)
+
+    def __str__(self) -> str:
+        return (
+            f'{self.get_audience_display()} '
+            f'{self.get_billing_cycle_display()} — '
+            f'{self.currency} {self.price}'
+        )
+
+
 class Subscription(models.Model):
-    PLAN_CHOICES = [
-        ('monthly', 'Monthly'),
-        ('yearly', 'Yearly'),
-    ]
+    PLAN_CHOICES = BILLING_CYCLE_CHOICES
     STATUS_CHOICES = [
         ('pending', 'Pending'),
         ('active', 'Active'),
@@ -1015,6 +1113,17 @@ class Subscription(models.Model):
         related_name='subscription',
     )
     plan = models.CharField(max_length=10, choices=PLAN_CHOICES)
+    plan_audience = models.CharField(
+        max_length=10,
+        choices=PLAN_AUDIENCE_CHOICES,
+        default='buyer',
+        help_text=(
+            'Which rate this member signed up on, recorded from their seller '
+            'flag at the time. For reporting only — it does not affect what '
+            'the membership lets them do, and flagging someone a seller later '
+            'does not change a membership they already hold.'
+        ),
+    )
     status = models.CharField(max_length=12, choices=STATUS_CHOICES, default='pending')
     paypal_subscription_id = models.CharField(
         max_length=100, unique=True, null=True, blank=True

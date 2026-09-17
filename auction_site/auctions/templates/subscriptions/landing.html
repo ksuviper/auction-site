@@ -47,12 +47,44 @@
       Choose the plan that works for you.
     </p>
 
+    {% comment %}
+      Sellers are offered their own rate and buyers theirs — never both. Which
+      set appears is decided by the view from the account's seller flag; the
+      cards below simply render whichever plans came back.
+
+      Prices come from the Subscription plans admin, so a change is live here
+      straight away.
+    {% endcomment %}
+    {% if is_seller_pricing %}
+    <p class="text-center mb-4">
+      <span class="badge bg-secondary fs-6">Seller pricing</span>
+    </p>
+    {% endif %}
+
+    {% if plans_unavailable %}
+    {% comment %} Nothing configured for this audience yet — say so rather than offering a
+       checkout that cannot complete or a card with a blank price. {% endcomment %}
+    <div class="alert alert-info fs-5 text-center" role="alert">
+      <strong>
+        {% if is_seller_pricing %}Seller memberships{% else %}Memberships{% endif %}
+        are not available to buy just yet.
+      </strong>
+      <p class="mb-0 mt-2">
+        We are still setting the pricing up. Please
+        {% load contact_tags %}get in touch at {% protected_email %} and we will
+        sort your membership out directly.
+      </p>
+    </div>
+    {% else %}
     <div class="row g-4">
       <!-- Monthly -->
+      {% if monthly_plan %}
       <div class="col-md-6">
         <div class="card h-100 shadow-sm">
           <div class="card-body p-4 text-center d-flex flex-column">
-            <h2 class="h4 fw-bold mb-2">Monthly</h2>
+            <h2 class="h4 fw-bold mb-2">
+              {% if is_seller_pricing %}Seller Monthly{% else %}Monthly{% endif %}
+            </h2>
             <div class="display-6 fw-bold text-success mb-1">${{ monthly_price }}</div>
             <p class="text-muted mb-4">per month</p>
             <form method="post" action="{% url 'subscribe_create' plan='monthly' %}" class="mt-auto">
@@ -64,20 +96,22 @@
           </div>
         </div>
       </div>
+      {% endif %}
 
       <!-- Annual -->
+      {% if yearly_plan %}
       <div class="col-md-6">
         <div class="card h-100 shadow-sm border-success">
           <div class="card-body p-4 text-center d-flex flex-column">
             <h2 class="h4 fw-bold mb-2">
-              Annual
-              {% if yearly_savings and yearly_savings > 0 %}
+              {% if is_seller_pricing %}Seller Annual{% else %}Annual{% endif %}
+              {% if yearly_savings %}
               <span class="badge bg-success align-middle">Best value</span>
               {% endif %}
             </h2>
             <div class="display-6 fw-bold text-success mb-1">${{ yearly_price }}</div>
             <p class="text-muted mb-1">per year</p>
-            {% if yearly_savings and yearly_savings > 0 %}
+            {% if yearly_savings %}
             <p class="text-success fw-semibold mb-4">Save about ${{ yearly_savings }} vs monthly</p>
             {% else %}
             <p class="text-muted mb-4">&nbsp;</p>
@@ -91,7 +125,9 @@
           </div>
         </div>
       </div>
+      {% endif %}
     </div>
+    {% endif %}
 
     {% endif %}
 

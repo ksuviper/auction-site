@@ -440,6 +440,15 @@ UNFOLD = {
                         "link": reverse_lazy("admin:auctions_subscription_changelist"),
                     },
                     {
+                        # What a membership costs. Separate from Subscriptions,
+                        # which is who holds one.
+                        "title": "Membership Pricing",
+                        "icon": "payments",
+                        "link": reverse_lazy(
+                            "admin:auctions_subscriptionplan_changelist"
+                        ),
+                    },
+                    {
                         "title": "Wishlists",
                         "icon": "favorite",
                         "link": reverse_lazy("admin:auctions_wishlist_changelist"),
@@ -581,6 +590,19 @@ PAYPAL_MONTHLY_PLAN_ID = os.getenv('PAYPAL_MONTHLY_PLAN_ID', '')
 PAYPAL_YEARLY_PLAN_ID = os.getenv('PAYPAL_YEARLY_PLAN_ID', '')
 PAYPAL_MONTHLY_PRICE = os.getenv('PAYPAL_MONTHLY_PRICE', '9.99')
 PAYPAL_YEARLY_PRICE = os.getenv('PAYPAL_YEARLY_PRICE', '99.99')
+
+# Sellers pay a different rate. No defaults: the price has not been decided,
+# and inventing one would put a figure in front of sellers that nobody agreed.
+# Until these are set and `manage.py create_paypal_plans` has been run, the
+# subscribe page tells a seller that seller memberships are not available yet.
+PAYPAL_SELLER_MONTHLY_PLAN_ID = os.getenv('PAYPAL_SELLER_MONTHLY_PLAN_ID', '')
+PAYPAL_SELLER_YEARLY_PLAN_ID = os.getenv('PAYPAL_SELLER_YEARLY_PLAN_ID', '')
+PAYPAL_SELLER_MONTHLY_PRICE = os.getenv('PAYPAL_SELLER_MONTHLY_PRICE', '')
+PAYPAL_SELLER_YEARLY_PRICE = os.getenv('PAYPAL_SELLER_YEARLY_PRICE', '')
+
+# These four, and the two above, are read once by migration 0026 to seed the
+# SubscriptionPlan rows. After that the database is the source of truth and the
+# running site never reads them again — prices are changed in the admin.
 PAYPAL_WEBHOOK_ID = os.getenv('PAYPAL_WEBHOOK_ID', '')
 
 # ============================================================================

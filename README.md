@@ -148,8 +148,12 @@ Visit `http://localhost:8000`. Log in at `/admin/` with your superuser credentia
 | `PAYPAL_MODE` | No | `sandbox` | `sandbox` or `live` |
 | `PAYPAL_MONTHLY_PLAN_ID` | For memberships | — | Plan ID from `create_paypal_plans` |
 | `PAYPAL_YEARLY_PLAN_ID` | For memberships | — | Plan ID from `create_paypal_plans` |
-| `PAYPAL_MONTHLY_PRICE` | No | `9.99` | Monthly membership price (USD) |
-| `PAYPAL_YEARLY_PRICE` | No | `99.99` | Annual membership price (USD) |
+| `PAYPAL_MONTHLY_PRICE` | No | `9.99` | Buyer monthly price. **Bootstrap only** — read once by migration `0026` to seed Membership Pricing, never read again |
+| `PAYPAL_YEARLY_PRICE` | No | `99.99` | Buyer annual price, same bootstrap-only caveat |
+| `PAYPAL_SELLER_MONTHLY_PLAN_ID` | No | — | Seller monthly PayPal plan, from `create_paypal_plans` |
+| `PAYPAL_SELLER_YEARLY_PLAN_ID` | No | — | Seller annual PayPal plan |
+| `PAYPAL_SELLER_MONTHLY_PRICE` | No | — | Seller monthly price. Blank on purpose: unset means seller memberships are not on sale yet |
+| `PAYPAL_SELLER_YEARLY_PRICE` | No | — | Seller annual price, same |
 | `PAYPAL_WEBHOOK_ID` | For memberships | — | Webhook ID from the PayPal dashboard (required for webhook verification) |
 | `CF_R2_ACCOUNT_ID` | No | — | Cloudflare R2 account ID (enables R2 media storage when set with the keys below) |
 | `CF_R2_ACCESS_KEY_ID` | No | — | R2 access key ID |
@@ -962,14 +966,18 @@ US-residents-only rule still applies on top of membership.
 1. Create a REST API app at the [PayPal Developer dashboard](https://developer.paypal.com/)
    (start in **Sandbox**). Copy the client ID and secret into `.env` as
    `PAYPAL_CLIENT_ID` / `PAYPAL_CLIENT_SECRET`, and set `PAYPAL_MODE=sandbox`.
-2. Set your prices via `PAYPAL_MONTHLY_PRICE` / `PAYPAL_YEARLY_PRICE`, then create
-   the billing plans:
+2. Set your starting prices via `PAYPAL_MONTHLY_PRICE` / `PAYPAL_YEARLY_PRICE`
+   (and the seller pair, if you have decided those), then create the billing
+   plans:
 
    ```bash
    python manage.py create_paypal_plans
    ```
 
-   Copy the printed plan IDs into `PAYPAL_MONTHLY_PLAN_ID` / `PAYPAL_YEARLY_PLAN_ID`.
+   The command writes each price and plan ID straight into **Membership
+   Pricing** in the admin, so there is nothing to paste. It still prints the
+   `PAYPAL_*_PLAN_ID` lines if you like keeping the `.env` in step, and it skips
+   any plan with no price rather than inventing one.
 3. Register a webhook in the PayPal dashboard pointing at
    `https://yourdomain.com/paypal/webhook/` and subscribe to the
    `BILLING.SUBSCRIPTION.*` events. Copy the webhook ID into `PAYPAL_WEBHOOK_ID`
@@ -984,6 +992,56 @@ US-residents-only rule still applies on top of membership.
 
 4. **Going live:** repeat the steps with live credentials, set `PAYPAL_MODE=live`,
    re-run `create_paypal_plans`, and register a live webhook.
+
+### Changing a price
+
+Prices live in the database, under **Subscriptions → Membership Pricing**. There
+are four rows: buyer and seller, monthly and yearly. Edit one and the new figure
+takes effect on the subscribe page immediately.
+
+> **Changing a price changes what current members pay.** PayPal applies a new
+> price to everyone on that plan from their next billing date — it is not
+> limited to new sign-ups, and PayPal notifies affected subscribers itself. This
+> is PayPal's documented behaviour for updating a plan's pricing scheme, not a
+> choice this project makes.
+
+**A price is only real once PayPal has it.** PayPal keeps its own copy on the
+billing plan and charges from that, so the admin sends the new price to PayPal
+*first* and **abandons the save if PayPal refuses**. That is deliberate: a saved
+price PayPal never accepted would leave the site advertising one figure while
+PayPal collected another, with nothing on screen to suggest a problem. If it
+fails you get a red message naming the reason, and the old price stands.
+
+The **PayPal** column shows when each price was last accepted. *Never synced*
+means the row has not been pushed since it was seeded — harmless if you have not
+changed it. Select rows and run **Re-send the price to PayPal** to retry after a
+failure without retyping anything.
+
+`create_paypal_plans` is now a one-time bootstrap. Day-to-day pricing is the
+admin.
+
+### Seller pricing
+
+A member flagged **Is seller** is offered the seller rate, and nobody is ever
+offered both. This is only about the price on the subscribe page: a seller's
+membership opens exactly the gates a buyer's does, and `has_active_subscription()`
+does not look at the distinction at all.
+
+| | Buyer | Seller |
+|---|---|---|
+| Sees on `/subscribe/` | Monthly, Annual | Seller Monthly, Seller Annual |
+| Recorded on the subscription | `plan_audience='buyer'` | `plan_audience='seller'` |
+
+**Seller pricing ships switched off**, because the rate had not been decided.
+Until you set a price and run `create_paypal_plans`, a seller-flagged member is
+told seller memberships are not on sale yet and given the contact address —
+rather than shown a blank price or a checkout that cannot complete. Buyers are
+unaffected throughout.
+
+**Flagging someone a seller does not touch a membership they already hold.**
+Their rate was agreed when they signed up; the seller rate applies only if they
+subscribe again. `plan_audience` records which rate they are actually on, and is
+filterable in the Subscriptions admin.
 
 ### What happens automatically vs. manually
 

@@ -26,7 +26,12 @@
       <div class="card-body p-4">
         <dl class="row mb-0 fs-5">
           <dt class="col-sm-4">Plan</dt>
-          <dd class="col-sm-8">{{ subscription.get_plan_display }}</dd>
+          {% comment %} Sellers pay a different rate, so the plan they hold is named in
+             full — "Seller Monthly" rather than "Monthly", matching the
+             wording on their PayPal receipt. {% endcomment %}
+          <dd class="col-sm-8">
+            {% if subscription.plan_audience == 'seller' %}Seller {% endif %}{{ subscription.get_plan_display }}
+          </dd>
 
           <dt class="col-sm-4">Status</dt>
           <dd class="col-sm-8">

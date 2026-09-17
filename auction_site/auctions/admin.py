@@ -4,6 +4,7 @@ from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.db.models import Count, Exists, OuterRef, Q
 from django.shortcuts import redirect
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.html import mark_safe
 from unfold.admin import ModelAdmin, StackedInline, TabularInline
 from unfold.forms import (
@@ -26,12 +27,14 @@ from .models import (
     SitePage,
     SiteSettings,
     Subscription,
+    SubscriptionPlan,
     UserProfile,
     Wishlist,
     describe_user_activity,
     user_activity,
 )
 from .services import copy_listing
+from .utils import PayPalPriceUpdateError, update_paypal_plan_price
 
 User = get_user_model()
 
@@ -971,18 +974,157 @@ def require_subscription(modeladmin, request, queryset):
     )
 
 
+@admin.register(SubscriptionPlan)
+class SubscriptionPlanAdmin(ModelAdmin):
+    """
+    What a membership costs. Changing a price here changes it at PayPal too.
+
+    The reason this is not a plain ModelAdmin: PayPal keeps its own copy of the
+    price on the billing plan and charges from that. Saving a new number here
+    without telling PayPal would leave the site advertising one figure while
+    PayPal collected another, and nothing would look wrong until a member
+    queried their statement. So the sync happens first and a failure stops the
+    save — see save_model.
+    """
+
+    list_display = (
+        'audience', 'billing_cycle', 'price_display', 'currency',
+        'is_active', 'sync_state', 'updated_at',
+    )
+    list_filter = ('audience', 'billing_cycle', 'is_active')
+    readonly_fields = ('last_synced_at', 'updated_at', 'pricing_note')
+    fieldsets = (
+        (
+            None,
+            {
+                'fields': (
+                    'audience', 'billing_cycle', 'price', 'currency',
+                    'pricing_note',
+                ),
+            },
+        ),
+        (
+            'PayPal',
+            {
+                'fields': (
+                    'paypal_plan_id', 'is_active', 'last_synced_at',
+                    'updated_at',
+                ),
+                'description': (
+                    'The plan ID comes from '
+                    '<code>manage.py create_paypal_plans</code>. Without one '
+                    'there is nothing to sell and nothing to sync, and this '
+                    'plan is not offered on the subscribe page.'
+                ),
+            },
+        ),
+    )
+    actions = ['resync_with_paypal']
+
+    @admin.display(description='Price', ordering='price')
+    def price_display(self, obj):
+        return f'{obj.currency} {obj.price}'
+
+    @admin.display(description='PayPal')
+    def sync_state(self, obj):
+        if not obj.paypal_plan_id:
+            return 'Not created yet'
+        if obj.last_synced_at is None:
+            return 'Never synced'
+        return obj.last_synced_at.strftime('%d %b %Y, %H:%M')
+
+    @admin.display(description='Before you change a price')
+    def pricing_note(self, obj=None):
+        """
+        Spelled out because it is the surprising part.
+
+        Verified against PayPal's Subscriptions documentation: updating a
+        plan's pricing scheme applies to everyone on that plan, not only to
+        people who sign up afterwards. Existing members are charged the new
+        amount from their next billing date.
+        """
+        return mark_safe(
+            '<strong>This changes what current members pay.</strong> PayPal '
+            'applies a new price to everyone on the plan from their next '
+            'billing date — it is not limited to new sign-ups. PayPal notifies '
+            'affected subscribers itself.<br>'
+            'The new price is sent to PayPal first. If PayPal refuses it, '
+            'nothing is saved here, so the figure on this page and the figure '
+            'PayPal charges never drift apart.'
+        )
+
+    def save_model(self, request, obj, form, change):
+        """
+        Send the price to PayPal before storing it, and abandon the save if
+        PayPal will not take it.
+
+        Only when the price actually moved: re-saving a row to flip is_active
+        should not fire a pricing call at PayPal.
+        """
+        price_changed = change and 'price' in form.changed_data
+
+        if price_changed:
+            try:
+                update_paypal_plan_price(obj, obj.price)
+            except PayPalPriceUpdateError as exc:
+                # Deliberately not saved. An admin who sees the new number on
+                # screen would reasonably believe members are being charged it.
+                self.message_user(
+                    request,
+                    f'Price NOT changed. PayPal rejected the update, so '
+                    f'nothing was saved and members are still being charged '
+                    f'the old price. {exc}',
+                    level=messages.ERROR,
+                )
+                return
+            obj.last_synced_at = timezone.now()
+            self.message_user(
+                request,
+                f'PayPal accepted the new price. Current members move to '
+                f'{obj.currency} {obj.price} on their next billing date.',
+                level=messages.SUCCESS,
+            )
+
+        super().save_model(request, obj, form, change)
+
+    @admin.action(description='Re-send the price to PayPal')
+    def resync_with_paypal(self, request, queryset):
+        """For retrying after a failed sync without retyping the price."""
+        synced, failed = 0, 0
+        for plan in queryset:
+            try:
+                update_paypal_plan_price(plan, plan.price)
+            except PayPalPriceUpdateError as exc:
+                failed += 1
+                self.message_user(request, f'{plan}: {exc}', level=messages.ERROR)
+                continue
+            plan.last_synced_at = timezone.now()
+            plan.save(update_fields=['last_synced_at'])
+            synced += 1
+
+        if synced:
+            self.message_user(
+                request,
+                f'{synced} plan(s) re-sent to PayPal.',
+                level=messages.SUCCESS,
+            )
+        if not synced and not failed:
+            self.message_user(request, 'Nothing selected.', level=messages.INFO)
+
+
 @admin.register(Subscription)
 class SubscriptionAdmin(ModelAdmin):
     list_display = (
         'user',
         'plan',
+        'plan_audience',
         'status',
         'current_period_end',
         'grace_period_end',
         'subscription_required_display',
         'paypal_subscription_id',
     )
-    list_filter = ('status', 'plan')
+    list_filter = ('status', 'plan', 'plan_audience')
     search_fields = ('user__username', 'user__email', 'paypal_subscription_id')
     raw_id_fields = ('user',)
     actions = [mark_active, mark_lapsed, exempt_from_subscription, require_subscription]

@@ -28,8 +28,8 @@
     <img src="{{ listing.image.url }}" alt="{{ listing.title }} — daylily photo"
          class="listing-detail-img rounded shadow-sm mb-4">
     {% else %}
-    {# Its own class, not listing-detail-img: that one now sizes itself to the
-       photo, and an empty box would collapse to the height of the icon. #}
+    {% comment %} Its own class, not listing-detail-img: that one now sizes itself to the
+       photo, and an empty box would collapse to the height of the icon. {% endcomment %}
     <div class="listing-detail-placeholder d-flex align-items-center justify-content-center
                 bg-light rounded shadow-sm mb-4"
          role="img" aria-label="No photo available for {{ listing.title }}">

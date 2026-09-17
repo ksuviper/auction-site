@@ -48,9 +48,9 @@
         </form>
 
         {% else %}
-        {# A seller is a user account with the seller flag ticked, so there is
+        {% comment %} A seller is a user account with the seller flag ticked, so there is
            nothing to create here — the fix is in the admin, and saying so
-           beats an empty dropdown that looks broken. #}
+           beats an empty dropdown that looks broken. {% endcomment %}
         <div class="text-center py-3">
           <i class="fas fa-store-slash fa-2x text-muted mb-3" aria-hidden="true"></i>
           <h3 class="h4">No sellers found</h3>
