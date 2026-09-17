@@ -337,13 +337,20 @@ class WelcomeBannerPositionTests(TestCase):
         self.assertLess(heading, banner)
 
     def test_the_heading_is_the_pages_h1_and_sits_outside_the_banner(self):
-        """It used to be inside the decorative box, which is what moved."""
-        html = self.client.get(reverse('home')).content.decode()
+        """
+        It used to be inside the decorative box, which is what moved.
 
-        self.assertIn(
-            '<h1 class="h2 fw-bold mb-3">Welcome to ASQ Daylily Auctions</h1>',
-            html,
-        )
+        Matched on the h1's own content rather than an exact tag string: the
+        wording now comes from the "home" SitePage, so the heading spans lines
+        in the template.
+        """
+        html = self.client.get(reverse('home')).content.decode()
+        heading = html[html.index('<h1'):html.index('</h1>')]
+
+        self.assertIn('h2 fw-bold mb-3', heading)
+        self.assertIn('Welcome to ASQ Daylily Auctions', heading)
+        # The decorative box is a separate element that starts after it.
+        self.assertNotIn('border-start', heading)
 
     def test_the_welcome_text_is_still_there(self):
         response = self.client.get(reverse('home'))

@@ -50,14 +50,24 @@
       The heading comes first, then the welcome text under it. The banner used
       to carry the <h1> itself and sit above everything, which put the page's
       only heading inside a decorative box.
+
+      Both come from the "home" SitePage an admin edits. The fallbacks are the
+      wording this page shipped with, so a deleted row or a database restored
+      without it leaves the homepage reading properly rather than headless.
     {% endcomment %}
-    <h1 class="h2 fw-bold mb-3">Welcome to ASQ Daylily Auctions</h1>
+    <h1 class="h2 fw-bold mb-3">
+      {% if home_page %}{{ home_page.title }}{% else %}Welcome to ASQ Daylily Auctions{% endif %}
+    </h1>
 
     <div class="p-4 mb-5 rounded-3 border-start border-4 border-primary bg-light">
+      {% if home_page %}
+      <div class="mb-0 fs-5 text-muted">{{ home_page.body|protect_emails }}</div>
+      {% else %}
       <p class="mb-0 fs-5 text-muted">
         Discover and bid on premium daylilies from growers across the country.
         New sellers are featured each week.
       </p>
+      {% endif %}
     </div>
 
     {% comment %}
@@ -67,31 +77,33 @@
       thing. What replaces it explains the place to someone who has just
       arrived.
 
-      The How It Works copy below is the original wording, moved rather than
-      rewritten.
+      The steps are rows an admin edits, reorders and can add to, so the
+      columns are sized from however many are published rather than fixed at
+      three. The whole section disappears if none are.
     {% endcomment %}
-
-    <!-- How It Works -->
+    {% if steps %}
     <section class="row g-4 mb-5" aria-labelledby="how-it-works-heading">
       <div class="col-12">
-        <h2 class="h4 fw-bold text-center mb-4" id="how-it-works-heading">How It Works</h2>
+        <h2 class="h4 fw-bold text-center mb-4" id="how-it-works-heading">
+          {% if steps_page %}{{ steps_page.title }}{% else %}How It Works{% endif %}
+        </h2>
+        {% if steps_page.body %}
+        <div class="fs-5 text-center mx-auto mb-2" style="max-width:48rem;">
+          {{ steps_page.body|protect_emails }}
+        </div>
+        {% endif %}
       </div>
-      <div class="col-md-4 text-center">
-        <i class="fas fa-search fa-3x text-primary mb-3 d-block" aria-hidden="true"></i>
-        <h3 class="h5 fw-bold">Browse</h3>
-        <p class="fs-5">Use the category sidebar to find daylilies by type and seller.</p>
+      {% for step in steps %}
+      <div class="col-md-{% if steps|length == 1 %}12{% elif steps|length == 2 %}6{% elif steps|length == 4 %}3{% else %}4{% endif %} text-center">
+        {% if step.icon %}
+        <i class="{{ step.icon }} fa-3x text-primary mb-3 d-block" aria-hidden="true"></i>
+        {% endif %}
+        <h3 class="h5 fw-bold">{{ step.title }}</h3>
+        <p class="fs-5">{{ step.body|linebreaksbr }}</p>
       </div>
-      <div class="col-md-4 text-center">
-        <i class="fas fa-gavel fa-3x text-primary mb-3 d-block" aria-hidden="true"></i>
-        <h3 class="h5 fw-bold">Bid</h3>
-        <p class="fs-5">Place bids on plants you love. The highest bid wins when time runs out.</p>
-      </div>
-      <div class="col-md-4 text-center">
-        <i class="fas fa-check-circle fa-3x text-primary mb-3 d-block" aria-hidden="true"></i>
-        <h3 class="h5 fw-bold">Win &amp; Enjoy</h3>
-        <p class="fs-5">Pay the seller directly using their preferred payment method.</p>
-      </div>
+      {% endfor %}
     </section>
+    {% endif %}
 
     {% comment %}
       About Us is pulled from the SitePage the admin edits, so this section and

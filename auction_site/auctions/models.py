@@ -892,6 +892,15 @@ class FAQItem(models.Model):
         return self.question
 
 
+# Two SitePage rows are pieces of the homepage rather than pages of their own:
+# 'home' is its heading and opening text, 'home-how-it-works' the heading above
+# the step cards. They live in the same model because they are the same thing —
+# a title and some prose an admin edits — but they have no address, so
+# SitePageView sends /legal/<one of these>/ to the homepage instead of serving
+# the fragment on its own at a URL nothing links to.
+HOMEPAGE_SLUGS = ('home', 'home-how-it-works')
+
+
 class SitePage(models.Model):
     """
     An admin-editable page of prose: Terms of Service, Privacy Policy, About Us.
@@ -900,6 +909,9 @@ class SitePage(models.Model):
     them differs except the words — they are looked up by slug and rendered by
     the same view. The rows are seeded by migration 0020; an admin edits them
     but should not normally need to create or delete any.
+
+    Also holds the two homepage fragments named in HOMEPAGE_SLUGS, which are
+    shown as part of the homepage rather than at an address of their own.
     """
 
     slug = models.SlugField(
@@ -927,15 +939,59 @@ class SitePage(models.Model):
         """
         Where this page is served.
 
-        About Us has an address of its own; everything else lives under /legal/.
-        One method so the admin's "view on site" link, the nav and any template
-        all agree, including for a page an admin adds later.
+        About Us has an address of its own, the homepage fragments are shown on
+        the homepage, and everything else lives under /legal/. One method so the
+        admin's "view on site" link, the nav and any template all agree,
+        including for a page an admin adds later.
         """
         from django.urls import reverse
 
+        if self.slug in HOMEPAGE_SLUGS:
+            return reverse('home')
         if self.slug == 'about-us':
             return reverse('about_us')
         return reverse('site_page', kwargs={'slug': self.slug})
+
+    def __str__(self) -> str:
+        return self.title
+
+
+class HomePageStep(models.Model):
+    """
+    One of the "How It Works" cards on the homepage.
+
+    A model rather than more fields on a settings row because it is a list: an
+    admin can reword a step, reorder them, unpublish one for a while, or add a
+    fourth. The homepage lays however many are published out in a row.
+    """
+
+    icon = models.CharField(
+        max_length=60,
+        blank=True,
+        default='fas fa-leaf',
+        help_text=(
+            'Font Awesome class for the picture above the step, e.g. '
+            '"fas fa-search", "fas fa-gavel", "fas fa-check-circle". Browse '
+            'them at fontawesome.com/icons. Leave empty for no picture.'
+        ),
+    )
+    title = models.CharField(max_length=100, help_text='The step\'s short name.')
+    body = models.TextField(help_text='One or two sentences under the title.')
+    display_order = models.PositiveIntegerField(
+        default=0,
+        help_text='Lower numbers appear first. Ties fall back to the title.',
+    )
+    is_published = models.BooleanField(
+        default=True,
+        help_text='Untick to keep this step off the homepage.',
+    )
+
+    class Meta:
+        # title as the tiebreak so rows all left at 0 come out in a stable
+        # order rather than however the database returns them.
+        ordering = ['display_order', 'title']
+        verbose_name = 'How It Works step'
+        verbose_name_plural = 'How It Works steps'
 
     def __str__(self) -> str:
         return self.title

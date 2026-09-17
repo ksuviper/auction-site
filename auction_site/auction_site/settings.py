@@ -383,6 +383,13 @@ UNFOLD = {
                         "link": reverse_lazy("admin:auctions_sitesettings_changelist"),
                     },
                     {
+                        "title": "Home Page Steps",
+                        "icon": "format_list_numbered",
+                        "link": reverse_lazy(
+                            "admin:auctions_homepagestep_changelist"
+                        ),
+                    },
+                    {
                         "title": "Pages",
                         "icon": "description",
                         "link": reverse_lazy("admin:auctions_sitepage_changelist"),

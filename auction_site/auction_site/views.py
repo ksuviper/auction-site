@@ -6,7 +6,7 @@ from django.utils.text import Truncator
 from allauth.account.views import LoginView as AllauthLoginView
 from django_ratelimit.decorators import ratelimit
 
-from auctions.models import SitePage
+from auctions.models import HomePageStep, SitePage
 
 # How much of the About Us page to show on the homepage before offering a link
 # to the rest. Words rather than characters so the cut lands between them.
@@ -22,10 +22,17 @@ def index(request):
     way in, so a second wall of listings here was a competing route to the same
     place.
 
-    About Us is read from the SitePage an admin edits, so this section and
-    /about/ cannot drift apart.
+    Every word on it is admin-editable. The welcome and the heading above the
+    steps are SitePage rows, the steps themselves are HomePageStep rows, and
+    About Us is read from the page behind /about/ so this section and that one
+    cannot drift apart. Each lookup can come back empty — a fresh database, a
+    row an admin deleted — and the template falls back to the wording the page
+    shipped with rather than rendering a gap.
     """
     about_page = SitePage.objects.filter(slug='about-us').first()
+    home_page = SitePage.objects.filter(slug='home').first()
+    steps_page = SitePage.objects.filter(slug='home-how-it-works').first()
+    steps = list(HomePageStep.objects.filter(is_published=True))
 
     excerpt = ''
     truncated = False
@@ -39,6 +46,9 @@ def index(request):
         truncated = excerpt != about_page.body
 
     return render(request, 'index.html', {
+        'home_page': home_page,
+        'steps_page': steps_page,
+        'steps': steps,
         'about_page': about_page,
         'about_excerpt': excerpt,
         'about_truncated': truncated,

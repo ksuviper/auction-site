@@ -26,6 +26,7 @@ from .forms import (
     ProxyBidForm,
 )
 from .models import (
+    HOMEPAGE_SLUGS,
     AuctionCategory,
     AuctionListing,
     Bid,
@@ -225,6 +226,11 @@ class SitePageView(DetailView):
         # than serving the same page at two.
         if kwargs.get('slug') == 'about-us' and request.path != reverse('about_us'):
             return redirect('about_us', permanent=True)
+        # The homepage fragments are shown as part of the homepage and have no
+        # address of their own. /legal/home/ would otherwise serve the welcome
+        # text as a bare page at a URL nothing links to.
+        if kwargs.get('slug') in HOMEPAGE_SLUGS:
+            return redirect('home', permanent=True)
         return super().get(request, *args, **kwargs)
 
 

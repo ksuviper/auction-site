@@ -386,14 +386,44 @@ Four pages are edited from the admin rather than in templates. All are under
 
 | Page | URL | Edited in |
 |---|---|---|
-| About Us | `/about/` | **Site pages** → About Us |
-| Terms of Service | `/legal/terms-of-service/` | **Site pages** → Terms of Service |
-| Privacy Policy | `/legal/privacy-policy/` | **Site pages** → Privacy Policy |
+| About Us | `/about/` | **Pages** → About Us |
+| Terms of Service | `/legal/terms-of-service/` | **Pages** → Terms of Service |
+| Privacy Policy | `/legal/privacy-policy/` | **Pages** → Privacy Policy |
 | FAQ | `/faq/` | **FAQ** (one row per question) |
 
 `SitePage` holds a slug, title and body; `FAQItem` holds a question, answer,
 `display_order` and `is_published`. Both are seeded or empty on a fresh install
 — migration `0020` creates the three pages.
+
+### The home page
+
+Every word on it is admin-managed. Nothing about it lives in the template any
+more except the layout.
+
+| Part | Edited in |
+|---|---|
+| The welcome heading and the text under it | **Pages** → *Welcome to ASQ Daylily Auctions* |
+| The heading above the step cards | **Pages** → *How It Works* |
+| The step cards themselves | **Home Page Steps**, one row each |
+| The About Us extract | **Pages** → About Us, shared with `/about/` |
+
+The welcome and the steps heading are `SitePage` rows like any other, but they
+are **parts of the home page rather than pages of their own**. Visiting
+`/legal/home/` redirects to `/`, and the Pages list marks them *On the home
+page* in its **Appears at** column so they are not mistaken for something with
+an address.
+
+**Steps are a list, not three fixed slots.** Each has an icon, a title, a
+sentence or two, an order and a published flag, so you can reword one, reorder
+them, hide one for a while, or add a fourth — the row is sized from however many
+are published. Publish none and the whole section disappears. The icon is a
+[Font Awesome](https://fontawesome.com/icons) class such as `fas fa-gavel`;
+leave it blank for a card with no picture.
+
+Every lookup falls back to the wording the page shipped with, so a row an admin
+deletes, or a database restored without these tables, still gives a readable
+home page rather than a gap. Migration `0025` seeds all of it with exactly what
+the template used to hardcode, so nothing moved when this shipped.
 
 **Both bodies are rendered as HTML** (`|safe`), so an admin can write headings,
 lists and links. FAQ answers additionally get `linebreaksbr`, since an admin

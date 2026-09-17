@@ -24,10 +24,26 @@ class SeededPageTests(TestCase):
     """Migration 0020 seeds the three pages the site links to."""
 
     def test_all_three_pages_exist(self):
+        """
+        The three pages with addresses of their own.
+
+        Two further rows share this model — the homepage's welcome and the
+        heading above its steps — but they are fragments of the homepage rather
+        than pages, and redirect there. Asserted as an exact set so an
+        unexpected row still shows up here.
+        """
         slugs = set(SitePage.objects.values_list('slug', flat=True))
 
         self.assertEqual(
-            slugs, {'privacy-policy', 'terms-of-service', 'about-us'}
+            slugs,
+            {
+                'privacy-policy', 'terms-of-service', 'about-us',
+                'home', 'home-how-it-works',
+            },
+        )
+        self.assertEqual(
+            slugs - {'home', 'home-how-it-works'},
+            {'privacy-policy', 'terms-of-service', 'about-us'},
         )
 
     def test_the_privacy_policy_kept_its_real_text(self):

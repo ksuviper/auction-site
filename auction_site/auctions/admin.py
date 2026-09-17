@@ -13,11 +13,13 @@ from unfold.forms import (
 )
 
 from .models import (
+    HOMEPAGE_SLUGS,
     AuctionCategory,
     AuctionListing,
     Bid,
     CombinedInvoice,
     FAQItem,
+    HomePageStep,
     Invoice,
     ListingComment,
     ProxyBid,
@@ -712,6 +714,43 @@ class FAQItemAdmin(ModelAdmin):
     ordering = ('display_order', 'question')
 
 
+@admin.register(HomePageStep)
+class HomePageStepAdmin(ModelAdmin):
+    """The "How It Works" cards on the homepage."""
+
+    list_display = ('title', 'icon', 'display_order', 'is_published')
+    list_editable = ('display_order', 'is_published')
+    list_filter = ('is_published',)
+    search_fields = ('title', 'body')
+    # Model Meta already orders by display_order; repeated here because
+    # list_editable on an ordering field is confusing without it being visible.
+    ordering = ('display_order', 'title')
+    fieldsets = (
+        (
+            None,
+            {
+                'fields': ('title', 'body', 'icon'),
+                'description': (
+                    'One step in the "How It Works" row on the homepage. The '
+                    'heading above the row, and the welcome text at the top of '
+                    'the page, are under <strong>Pages</strong>.'
+                ),
+            },
+        ),
+        (
+            'Placement',
+            {
+                'fields': ('display_order', 'is_published'),
+                'description': (
+                    'The homepage spreads however many steps are published '
+                    'across the row, so adding a fourth or unpublishing one is '
+                    'safe. With none published the whole section disappears.'
+                ),
+            },
+        ),
+    )
+
+
 @admin.register(SiteSettings)
 class SiteSettingsAdmin(ModelAdmin):
     """
@@ -808,15 +847,39 @@ class SiteSettingsAdmin(ModelAdmin):
 
 @admin.register(SitePage)
 class SitePageAdmin(ModelAdmin):
-    list_display = ('title', 'slug', 'updated_at', 'view_on_site_link')
+    list_display = ('title', 'appears_at', 'slug', 'updated_at')
     search_fields = ('title', 'slug', 'body')
     readonly_fields = ('updated_at',)
     prepopulated_fields = {'slug': ('title',)}
+    fieldsets = (
+        (
+            None,
+            {
+                'fields': ('title', 'body', 'slug', 'updated_at'),
+                'description': (
+                    'Most of these are pages with an address of their own. Two '
+                    'are parts of the home page instead — its welcome, and the '
+                    'heading above the "How It Works" row — and the '
+                    '<strong>Appears at</strong> column says which is which. '
+                    'The steps themselves are under '
+                    '<strong>Home Page Steps</strong>.'
+                ),
+            },
+        ),
+    )
 
-    @admin.display(description='Public page')
-    def view_on_site_link(self, obj):
-        """A direct link, since the address depends on the slug."""
+    @admin.display(description='Appears at')
+    def appears_at(self, obj):
+        """
+        Where the words show up, linked.
+
+        The address depends on the slug, and for the homepage fragments there
+        is no address of their own — saying "the home page" is more use to an
+        admin than a link to / that looks like every other row's.
+        """
         url = obj.get_absolute_url()
+        if obj.slug in HOMEPAGE_SLUGS:
+            return mark_safe(f'<a href="{url}" target="_blank">On the home page</a>')
         return mark_safe(f'<a href="{url}" target="_blank">{url}</a>')
 
 
