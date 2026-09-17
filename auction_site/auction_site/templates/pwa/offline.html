@@ -1,0 +1,53 @@
+{% comment %}
+  Shown by the service worker when a page is opened with no connection.
+
+  Standalone rather than extending base.html on purpose. base.html asks the
+  database for the branding row and the category sidebar, and pulls Bootstrap
+  and Font Awesome off a CDN — none of which is reachable at the moment this
+  page is needed. So it carries its own styling inline and nothing else.
+{% endcomment %}<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Offline – {{ site_name }}</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #f8f9fa;
+      color: #212529;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      text-align: center;
+      padding: 1.5rem;
+      box-sizing: border-box;
+    }
+    main { max-width: 26rem; }
+    h1 { font-size: 1.5rem; margin: 0 0 .75rem; }
+    p { font-size: 1.05rem; line-height: 1.6; color: #495057; margin: 0 0 1.5rem; }
+    button {
+      font: inherit;
+      padding: .65rem 1.4rem;
+      border: 0;
+      border-radius: .375rem;
+      background: #212529;
+      color: #fff;
+      cursor: pointer;
+    }
+    button:hover { background: #343a40; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>You&rsquo;re offline</h1>
+    <p>
+      {{ site_name }} needs a connection to show listings and bids, so there is
+      nothing to display until you are back online.
+    </p>
+    <button type="button" onclick="location.reload()">Try again</button>
+  </main>
+</body>
+</html>

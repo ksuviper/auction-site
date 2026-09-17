@@ -217,7 +217,7 @@ The brief covers several systems that were never built here:
 | Admin-managed **PayPal pricing sync** and "Sync to PayPal" retry | Does not exist. Membership prices are `PAYPAL_MONTHLY_PRICE` / `PAYPAL_YEARLY_PRICE` env settings; there is no admin price editor and no sync. |
 | **Seller-follow / push notifications**, notify-followers action | Not built. |
 | **VAPID keys** | Not built (no push). |
-| **PWA** icon generation | Not built; see the README note under *Site images*. |
+| **PWA** icon generation | Not built at the time of this audit. Since built — see *Installing the site as an app* in the README. The icons are generated from the admin's upload, and the service worker caches only an offline page, never member-specific content. |
 
 ---
 

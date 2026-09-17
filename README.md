@@ -370,14 +370,8 @@ empty header.
 > twenty templates, which is why it was left out of the header change rather
 > than done halfway.
 
-> **Not implemented: multi-size PWA icon generation.** Item 18 asked for
-> `generate_pwa_icons` to be repointed at this field and re-run automatically on
-> save. **This project has no PWA batch** — no manifest, no service worker, no
-> icon command, no `apple-touch-icon` before this change. So the icon is stored
-> and *used* (tab and home-screen icon), but nothing generates a 192/512 icon
-> set, because there is no manifest to consume one. When the PWA work lands, its
-> manifest should read `SiteSettings.app_icon_image` and generation can hook
-> into `SiteSettings.save()`.
+The app icon is also where the installable-app icons are cut from — see
+[Installing the site as an app](#installing-the-site-as-an-app).
 
 ### Content pages
 
@@ -1004,6 +998,58 @@ US-residents-only rule still applies on top of membership.
 
 Admins can manage memberships under **Users → Subscriptions** in the admin
 (mark active/lapsed, exempt a user, require a subscription).
+
+---
+
+## Installing the site as an app
+
+The site is a progressive web app: Android offers **Install**, desktop Chrome
+and Edge show an install icon in the address bar, and iOS can *Add to Home
+Screen*. It opens without browser chrome and gets its own launcher icon.
+
+| URL | What it is |
+|---|---|
+| `/manifest.webmanifest` | Names the app and points at the icons. Built per request from **Site Content → Branding**, so renaming the site renames the app. |
+| `/sw.js` | The service worker. Served from the site root because a worker only controls URLs at or below its own path. |
+| `/pwa/icon-192.png`, `/pwa/icon-512.png` | Generated from the uploaded app icon, or the built-in logo when there is none. |
+| `/pwa/icon-192-maskable.png`, `/pwa/icon-512-maskable.png` | The same, inset so Android can crop them to whatever shape its launcher uses. |
+| `/offline/` | Shown when a page is opened with no connection. |
+
+### It needs HTTPS
+
+**This is the one part that is not code.** Browsers ignore the manifest and
+refuse to register a service worker over plain `http://`, so no install option
+appears anywhere, however correct the rest is. `localhost` is the only
+exception, which is why it works in development. If Install is missing on the
+live site, check the certificate first.
+
+### What the service worker deliberately does not do
+
+It caches **one** thing: the offline page. Every other request goes straight to
+the network, and anything that is not a page load — form posts, uploads, images
+— it does not touch at all.
+
+That restraint is the point. Listings, bids and invoices change by the minute
+and differ per signed-in member, so serving a cached copy of an auction would
+be worse than showing nothing. A service worker also outlives the tab that
+installed it, so a caching mistake is hard to take back.
+
+To remove one from a browser: DevTools → Application → Service Workers →
+Unregister. **Bump `SERVICE_WORKER_VERSION` in `auction_site/pwa.py` whenever
+`templates/pwa/sw.js` changes**, or phones keep running the old copy.
+
+### Icons
+
+Generated with Pillow rather than kept as files, so the installed app always
+matches the branding in the admin instead of needing a second set kept in step
+by hand. They are cached against the branding row's `updated_at`, so a new
+upload appears immediately. Only 192 and 512 are served; any other size 404s,
+because the size comes off the URL and an open-ended one invites a request for
+a 20000-pixel PNG.
+
+A non-square image is letterboxed on a white square rather than squashed. The
+maskable pair insets the artwork to 60% of the width, which is the share that
+survives a circular crop.
 
 ---
 

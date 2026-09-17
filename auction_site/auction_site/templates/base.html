@@ -15,10 +15,30 @@
     {% endcomment %}
     {% if site_settings.app_icon_image %}
     <link rel="icon" href="{{ site_settings.app_icon_image.url }}">
-    <link rel="apple-touch-icon" href="{{ site_settings.app_icon_image.url }}">
     {% else %}
     <link rel="icon" type="image/x-icon" href="{% static 'favicon.ico' %}">
     {% endif %}
+
+    {% comment %}
+      Installable web app. The manifest names it and points at the icons; the
+      worker registered at the bottom of the page is the other half of what a
+      browser insists on before it offers to install.
+
+      apple-touch-icon is separate from the manifest because iOS ignores the
+      manifest's icons for "Add to Home Screen" and reads this instead. It
+      points at the generated 192px square rather than the raw upload, so a
+      non-square image is letterboxed rather than squashed by the phone.
+
+      All of this needs HTTPS. Over plain http:// a browser ignores the
+      manifest and refuses the worker, and no install option appears anywhere.
+    {% endcomment %}
+    <link rel="manifest" href="{% url 'pwa_manifest' %}">
+    <link rel="apple-touch-icon" href="{% url 'pwa_icon' 192 %}">
+    <meta name="theme-color" content="#212529">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="{{ site_settings.site_name|default:'Daylily Auctions' }}">
 
     <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -239,6 +259,7 @@
       few lines and runs at the end of the body anyway.
     {% endcomment %}
     <script src="{% static 'js/protected-email.js' %}"></script>
+    <script src="{% static 'js/pwa.js' %}"></script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>

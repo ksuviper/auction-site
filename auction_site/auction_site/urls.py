@@ -23,7 +23,7 @@ from django.views.generic import RedirectView, TemplateView
 
 from auctions.views import RateLimitedSignupView
 
-from . import views
+from . import pwa, views
 
 urlpatterns = [
     path('', views.index, name='home'),
@@ -42,6 +42,20 @@ urlpatterns = [
     # rather than prose the client would edit, and Facebook requires the URL.
     path('privacy/data-deletion/', TemplateView.as_view(template_name='legal/data_deletion.html'), name='data_deletion'),
     path('favicon.ico', RedirectView.as_view(url=settings.STATIC_URL + 'favicon.ico', permanent=True)),
+
+    # Progressive web app. The service worker has to be served from the site
+    # root: a worker only controls URLs at or below its own path, so one under
+    # /static/ would control /static/ and leave the site uninstallable.
+    path('manifest.webmanifest', pwa.manifest, name='pwa_manifest'),
+    path('sw.js', pwa.service_worker, name='pwa_service_worker'),
+    path('offline/', pwa.offline, name='pwa_offline'),
+    path('pwa/icon-<int:size>.png', pwa.icon, name='pwa_icon'),
+    path(
+        'pwa/icon-<int:size>-maskable.png',
+        pwa.maskable_icon,
+        name='pwa_icon_maskable',
+    ),
+
     path('admin/invoices/', include('auctions.invoice_urls')),
     path('admin/combined-invoices/', include('auctions.combined_invoice_urls')),
     path('admin/weekly-setup/', include('auctions.weekly_setup_urls')),

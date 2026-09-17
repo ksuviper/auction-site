@@ -102,7 +102,7 @@ class HeaderAndIconRenderTests(TestCase):
         self.assertContains(response, '/media/site/banner.png')
         self.assertNotContains(response, 'img/logo.png')
 
-    def test_an_uploaded_icon_becomes_the_tab_and_home_screen_icon(self):
+    def test_an_uploaded_icon_becomes_the_tab_icon(self):
         settings_row = SiteSettings.load()
         settings_row.app_icon_image = 'site/icon.png'
         settings_row.save()
@@ -110,10 +110,24 @@ class HeaderAndIconRenderTests(TestCase):
         response = self.client.get(reverse('home'))
 
         self.assertContains(response, 'rel="icon" href="/media/site/icon.png"')
-        self.assertContains(
-            response, 'rel="apple-touch-icon" href="/media/site/icon.png"'
-        )
         self.assertNotContains(response, 'favicon.ico')
+
+    def test_the_home_screen_icon_is_the_generated_square(self):
+        """
+        iOS ignores the manifest for "Add to Home Screen" and reads
+        apple-touch-icon, so this points at the generated 192px square rather
+        than the raw upload — a non-square upload would otherwise be squashed
+        by the phone. It is derived from the same uploaded image.
+        """
+        settings_row = SiteSettings.load()
+        settings_row.app_icon_image = 'site/icon.png'
+        settings_row.save()
+
+        response = self.client.get(reverse('home'))
+
+        self.assertContains(
+            response, 'rel="apple-touch-icon" href="/pwa/icon-192.png"'
+        )
 
     def test_the_two_images_are_independent(self):
         """Neither is derived from the other — that is the whole point."""

@@ -5,3 +5,4 @@ Disallow: /admin/invoices/
 Disallow: /admin/weekly-setup/
 Disallow: /admin/reports/
 Disallow: /accounts/
+Disallow: /offline/
