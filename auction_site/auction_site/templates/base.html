@@ -55,6 +55,40 @@
         Skip to main content
     </a>
 
+    {% comment %}
+      Install prompt. Hidden until install-banner.js decides it is worth
+      showing, which on Android means waiting for the browser to confirm the
+      site is installable, and on iOS means offering the manual steps Safari
+      gives no other way to discover.
+
+      In the normal flow rather than position: fixed. The navigation below is
+      sticky-top, so a fixed bar would sit on top of it the moment anyone
+      scrolled. Here it greets you on arrival — which is when people decide
+      whether to keep an app — and then scrolls away instead of permanently
+      eating a strip of a phone screen.
+
+      Both wordings are rendered and JavaScript reveals one, so the site name
+      comes from the branding row rather than being duplicated in a script.
+    {% endcomment %}
+    <div id="pwa-install-banner" class="pwa-install-banner" hidden
+         role="region" aria-label="Install this site as an app">
+      <img data-pwa-icon="{% url 'pwa_icon' 192 %}" alt=""
+           width="32" height="32" class="pwa-install-banner__icon">
+      <p class="pwa-install-banner__text">
+        <span data-pwa-message="prompt" hidden>
+          Install {{ site_settings.site_name|default:"ASQ Daylily Auctions" }} for quick access.
+        </span>
+        <span data-pwa-message="ios" hidden>
+          Install this app: tap the Share icon, then &ldquo;Add to Home Screen&rdquo;.
+        </span>
+      </p>
+      <button type="button" data-pwa-action="install"
+              class="pwa-install-banner__install" hidden>Install</button>
+      <button type="button" data-pwa-action="dismiss"
+              class="pwa-install-banner__dismiss"
+              aria-label="Dismiss this message">&times;</button>
+    </div>
+
     <!-- Header Hero Section -->
     <header class="bg-light border-bottom">
         <div class="container py-2">
@@ -260,6 +294,7 @@
     {% endcomment %}
     <script src="{% static 'js/protected-email.js' %}"></script>
     <script src="{% static 'js/pwa.js' %}"></script>
+    <script src="{% static 'js/install-banner.js' %}"></script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>

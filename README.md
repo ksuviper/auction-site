@@ -1081,6 +1081,42 @@ appears anywhere, however correct the rest is. `localhost` is the only
 exception, which is why it works in development. If Install is missing on the
 live site, check the certificate first.
 
+### The install bar
+
+A slim bar across the top of the page on phones and tablets, offering the
+install. The browser's own affordance is easy to miss, and on iOS there is none
+at all, so the bar is the only discovery route an iPhone visitor gets.
+
+**It is not the same thing on each platform**, because the platforms are not the
+same:
+
+| | What the bar shows | Does the button work |
+|---|---|---|
+| Chrome, Edge, Android | "Install … for quick access." with an **Install** button | Yes. It replays the browser's own install dialog |
+| iOS Safari | "Install this app: tap the Share icon, then Add to Home Screen." | There is no button. Apple provides no way to trigger an install from code |
+
+The Install button appears only once the browser has fired
+`beforeinstallprompt`, which it does only when it already considers the site
+installable. So the button is never present-but-dead: if the browser is not
+offering an install, neither is the bar.
+
+**It stays out of the way.** It never appears inside the installed app, it is
+hidden above 992px wide, and dismissing it is remembered for 14 days in
+`localStorage`. A bar that returns on every page view is worse than no bar.
+
+It sits in the normal page flow rather than being `position: fixed`. The
+navigation is `sticky-top`, so a fixed bar would sit on top of it the moment
+anyone scrolled; in the flow it greets you on arrival, which is when people
+decide whether to keep an app, then scrolls away.
+
+Nothing here is load-bearing: with JavaScript off the site is unchanged and the
+browser's own install route still works.
+
+> **Push notifications are a separate, not-yet-built feature**, tracked as its
+> own backlog item. When it lands it will need to extend the service worker
+> described below with `push` and `notificationclick` handlers, and bump
+> `SERVICE_WORKER_VERSION`. The install bar did not touch the worker at all.
+
 ### What the service worker deliberately does not do
 
 It caches **one** thing: the offline page. Every other request goes straight to

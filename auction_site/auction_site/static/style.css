@@ -365,3 +365,88 @@ a:hover {
     color: var(--dark-navy);
     font-weight: 700;
 }
+
+/* ── Install-this-app bar ────────────────────────────────────────────────── */
+
+/*
+ * Shown by install-banner.js, never by the page itself. It stays hidden until
+ * the script has confirmed there is something to offer: on Android that means
+ * the browser has said the site is installable, on iOS it means the manual
+ * steps Safari gives no other way to find.
+ *
+ * The [hidden] rule is specific enough to beat the display below on its own, so
+ * the attribute keeps working as an on/off switch without !important.
+ *
+ * Styled here rather than with Bootstrap utilities because it renders before
+ * anything else on the page, and a bar that arrives unstyled while a CDN
+ * stylesheet is still loading looks like a fault.
+ */
+.pwa-install-banner {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 0.9rem;
+    background-color: #212529;
+    color: #fff;
+    font-size: 1rem;
+    line-height: 1.35;
+}
+
+.pwa-install-banner[hidden] {
+    display: none;
+}
+
+.pwa-install-banner__icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    flex: 0 0 auto;
+    background-color: #fff;
+}
+
+.pwa-install-banner__text {
+    margin: 0;
+    flex: 1 1 auto;
+}
+
+.pwa-install-banner__install {
+    flex: 0 0 auto;
+    border: 0;
+    border-radius: 0.375rem;
+    padding: 0.4rem 0.9rem;
+    font: inherit;
+    font-weight: 600;
+    background-color: #fff;
+    color: #212529;
+    cursor: pointer;
+}
+
+.pwa-install-banner__install:hover {
+    background-color: #e9ecef;
+}
+
+.pwa-install-banner__dismiss {
+    flex: 0 0 auto;
+    border: 0;
+    background: none;
+    color: #adb5bd;
+    font-size: 1.6rem;
+    line-height: 1;
+    padding: 0 0.25rem;
+    cursor: pointer;
+}
+
+.pwa-install-banner__dismiss:hover {
+    color: #fff;
+}
+
+/*
+ * Phones and tablets only. Desktop Chrome can install too, but it puts an icon
+ * in the address bar where someone at a keyboard will find it, and a bar across
+ * a wide screen for that is nagging rather than helping.
+ */
+@media (min-width: 992px) {
+    .pwa-install-banner {
+        display: none !important;
+    }
+}
