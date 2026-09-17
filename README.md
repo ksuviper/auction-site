@@ -326,9 +326,24 @@ email as "$50" and does not read as a price.
 
 ## Admin-Managed Content
 
-### Site images
+### Branding: header wording and images
 
-**Site Content → Images** holds two uploads on a `SiteSettings` singleton:
+**Site Content → Branding** is one `SiteSettings` singleton holding everything
+that identifies the site. Three lines of text:
+
+| Field | Shown as |
+|---|---|
+| `site_name` | The large first line beside the header image, and the image's `alt` text |
+| `site_slogan` | The smaller second line underneath |
+| `site_extra_line` | An optional third line, empty and unused for now |
+
+**Each line is left out when blank**, which is the point of allowing empty. A
+banner image often has the name painted into it already, and repeating it
+underneath looks wrong — so clear `site_name` and the header shows the image
+alone. The defaults are the exact wording the templates used to hardcode, so
+nothing moved when this shipped.
+
+And two uploads:
 
 | Field | Used as | Falls back to |
 |---|---|---|
@@ -342,9 +357,18 @@ neither is derived from the other.
 The row is pinned to `pk=1`: `SiteSettings.load()` returns it, creating it on
 first use, and `save()` forces the pk so no second row can appear by any route.
 The admin refuses both adding and deleting; **clearing a field** is how you go
-back to a built-in image. The context processor that reads it is wrapped, so a
-database problem gives a page with the built-in logo rather than a 500 on top
-of a 500.
+back to a built-in image or drop a line of text. The context processor that
+reads it is wrapped, and its fallback is an unsaved instance rather than
+`None` — that carries the field defaults without touching the database, so a
+site whose database has gone still shows its name and slogan instead of an
+empty header.
+
+> **The name is not yet used everywhere.** The browser tab title, the `<meta
+> name="description">` and the footer still spell out *Above Status Quo Daylily
+> Auction Group* in the templates, so renaming the site changes the header but
+> not those. Wiring them up means touching the `{% block title %}` of roughly
+> twenty templates, which is why it was left out of the header change rather
+> than done halfway.
 
 > **Not implemented: multi-size PWA icon generation.** Item 18 asked for
 > `generate_pwa_icons` to be repointed at this field and re-run automatically on

@@ -375,8 +375,11 @@ UNFOLD = {
                 "collapsible": False,
                 "items": [
                     {
-                        "title": "Images",
-                        "icon": "image",
+                        # Named for what it holds rather than "Images": the
+                        # same row now carries the site name, slogan and the
+                        # optional third header line as well as the two images.
+                        "title": "Branding",
+                        "icon": "branding_watermark",
                         "link": reverse_lazy("admin:auctions_sitesettings_changelist"),
                     },
                     {

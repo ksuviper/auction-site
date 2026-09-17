@@ -772,7 +772,7 @@ class Wishlist(models.Model):
 
 class SiteSettings(models.Model):
     """
-    Site-wide images an admin can replace without touching the code.
+    The site's own name, wording and images, editable without touching code.
 
     A singleton: there is only ever one site, so ``SiteSettings.load()``
     returns the single row (creating it on first use) and the admin refuses to
@@ -781,8 +781,32 @@ class SiteSettings(models.Model):
     The two images are separate on purpose. A wide header banner cropped square
     for an app icon looks bad, and a square icon stretched across the header
     looks worse — so neither is derived from the other.
+
+    The three header lines default to the wording the site shipped with, so
+    adding them changes nothing until somebody edits them. Each is optional and
+    disappears when blank, which matters when the banner image already has the
+    name written into it and repeating it underneath looks wrong.
     """
 
+    site_name = models.CharField(
+        max_length=120, blank=True, default='Above Status Quo',
+        help_text=(
+            'The large first line beside the header image. Leave empty to '
+            'show no name — useful when the image already has it.'
+        ),
+    )
+    site_slogan = models.CharField(
+        max_length=200, blank=True, default='Daylily Auction Group',
+        help_text='The smaller second line, under the name.',
+    )
+    site_extra_line = models.CharField(
+        max_length=200, blank=True, default='',
+        verbose_name='Extra line',
+        help_text=(
+            'An optional third line under the slogan. Nothing is shown while '
+            'this is empty.'
+        ),
+    )
     header_banner_image = models.ImageField(
         upload_to='site/', blank=True,
         help_text=(
@@ -823,13 +847,16 @@ class SiteSettings(models.Model):
 
     def delete(self, *args, **kwargs):
         """
-        Clearing the images is what "removing" means here.
+        Resetting to how the site shipped is what "removing" means here.
 
-        Deleting the row would just have load() recreate it empty on the next
-        page view, so this does that directly and keeps pk=1 stable.
+        Deleting the row would just have load() recreate it on the next page
+        view, so this does that directly and keeps pk=1 stable: images cleared,
+        wording back to the defaults on the fields.
         """
         self.header_banner_image = ''
         self.app_icon_image = ''
+        for field in ('site_name', 'site_slogan', 'site_extra_line'):
+            setattr(self, field, self._meta.get_field(field).get_default())
         self.save()
 
     def __str__(self) -> str:

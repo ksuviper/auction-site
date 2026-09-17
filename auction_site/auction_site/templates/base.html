@@ -52,13 +52,27 @@
                       sideways on a phone if the CSS ever fails to load.
                     {% endcomment %}
                     <img src="{% if site_settings.header_banner_image %}{{ site_settings.header_banner_image.url }}{% else %}{% static 'img/logo.png' %}{% endif %}"
-                         alt="ASQ Daylily Auction Group"
+                         alt="{{ site_settings.site_name|default:'Site logo' }}"
                          class="img-fluid"
                          style="max-height: 160px; max-width: 100%; height: auto;">
                 </div>
                 <div class="col-md-6 text-center text-md-end mt-3 mt-md-0">
-                    <p class="display-5 fw-bold mb-0" aria-hidden="true">Above Status Quo</p>
-                    <p class="text-muted mb-0">Daylily Auction Group</p>
+                    {% comment %}
+                      All three lines come from Site Content → Branding and each
+                      is skipped when blank, so an admin can clear the name when
+                      the banner image already carries it. aria-hidden on the
+                      name because the image's alt text is that same name — a
+                      screen reader should not hear it twice.
+                    {% endcomment %}
+                    {% if site_settings.site_name %}
+                    <p class="display-5 fw-bold mb-0" aria-hidden="true">{{ site_settings.site_name }}</p>
+                    {% endif %}
+                    {% if site_settings.site_slogan %}
+                    <p class="text-muted mb-0">{{ site_settings.site_slogan }}</p>
+                    {% endif %}
+                    {% if site_settings.site_extra_line %}
+                    <p class="text-muted small mb-0">{{ site_settings.site_extra_line }}</p>
+                    {% endif %}
                 </div>
             </div>
         </div>

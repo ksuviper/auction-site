@@ -717,14 +717,29 @@ class SiteSettingsAdmin(ModelAdmin):
     """
     The one settings row, edited in place.
 
+    Header text first, because the wording is what an admin comes here to
+    change; the images are set once and rarely touched again.
+
     Adding and deleting are both refused: there is only ever one site, and
-    "removing" an image means clearing that field rather than dropping the row
+    "removing" something means clearing that field rather than dropping the row
     the whole site reads on every page.
     """
 
     list_display = ('__str__', 'updated_at')
     readonly_fields = ('updated_at', 'header_preview', 'icon_preview')
     fieldsets = (
+        (
+            'Header text',
+            {
+                'fields': ('site_name', 'site_slogan', 'site_extra_line'),
+                'description': (
+                    'The lines of text beside the header image, on every '
+                    'page. Each one is left out when empty — so if your banner '
+                    'image already has the name in it, clear the name here '
+                    'rather than showing it twice.'
+                ),
+            },
+        ),
         (
             'Header banner',
             {

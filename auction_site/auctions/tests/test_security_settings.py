@@ -220,9 +220,12 @@ class AllauthPageRenderTests(TestCase):
             '/accounts/login/code/confirm/', REMOTE_ADDR='198.51.100.95'
         )
 
-        # base.html's landmark and the site footer, i.e. not allauth's bare doc.
+        # base.html's landmarks, i.e. not allauth's bare document. Matched on
+        # structure rather than on the site's name, which an admin can now
+        # change from Site Content → Branding.
         self.assertContains(response, 'id="main-content"')
-        self.assertContains(response, 'ASQ Daylily')
+        self.assertContains(response, 'aria-label="Main navigation"')
+        self.assertContains(response, '<footer')
         self.assertContains(response, 'btn btn-primary')
 
     def test_mfa_challenge_screen_renders_a_usable_form(self):
