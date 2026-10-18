@@ -89,6 +89,30 @@
       </div>
     </div>
 
+    <div class="card shadow-sm mb-4">
+      <div class="card-body p-4">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+          <div>
+            <h2 class="h5 fw-bold mb-1">
+              <i class="fas fa-bell me-2 text-secondary" aria-hidden="true"></i>Notifications
+            </h2>
+            <p class="mb-0 fs-5">
+              {% with follows=request.user.seller_follows.count %}
+              {% if follows %}
+              Following {{ follows }} seller{{ follows|pluralize }}.
+              {% else %}
+              Not following any sellers yet.
+              {% endif %}
+              {% endwith %}
+            </p>
+          </div>
+          <a href="{% url 'notification_settings' %}" class="btn btn-outline-primary btn-lg">
+            Manage Notifications
+          </a>
+        </div>
+      </div>
+    </div>
+
     <div class="d-flex gap-3 flex-wrap">
       <a href="{% url 'profile_edit' %}" class="btn btn-primary btn-lg px-4">
         <i class="fas fa-pencil-alt me-2"></i>Edit Profile

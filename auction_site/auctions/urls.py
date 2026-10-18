@@ -1,6 +1,14 @@
 from django.urls import path
 
 from .invoice_views import InvoiceDetailView
+from .notification_views import (
+    FollowSellerView,
+    NotificationSettingsView,
+    PushDeviceRemoveView,
+    PushSubscribeView,
+    PushUnsubscribeView,
+    UnfollowSellerView,
+)
 from .views import (
     AccountPendingApprovalView,
     BuyNowView,
@@ -37,10 +45,32 @@ urlpatterns = [
         ToggleEmailLoginCodeView.as_view(),
         name='toggle_email_login_code',
     ),
+    path(
+        'account/notifications/',
+        NotificationSettingsView.as_view(),
+        name='notification_settings',
+    ),
+    path(
+        'account/notifications/subscribe/',
+        PushSubscribeView.as_view(),
+        name='push_subscribe',
+    ),
+    path(
+        'account/notifications/unsubscribe/',
+        PushUnsubscribeView.as_view(),
+        name='push_unsubscribe',
+    ),
+    path(
+        'account/notifications/devices/<int:pk>/remove/',
+        PushDeviceRemoveView.as_view(),
+        name='push_device_remove',
+    ),
     path('category/<slug:slug>/', CategoryListingView.as_view(), name='category_listings'),
     # Ahead of seller/<int:pk>/ so the literal path is not read as a seller pk.
     path('seller/dashboard/', SellerDashboardView.as_view(), name='seller_dashboard'),
     path('seller/<int:pk>/', SellerListingView.as_view(), name='seller_listings'),
+    path('seller/<int:pk>/follow/', FollowSellerView.as_view(), name='follow_seller'),
+    path('seller/<int:pk>/unfollow/', UnfollowSellerView.as_view(), name='unfollow_seller'),
     path('listing/<int:pk>/', ListingDetailView.as_view(), name='listing_detail'),
     path('listing/<int:pk>/bid/', PlaceBidView.as_view(), name='place_bid'),
     path('listing/<int:pk>/buy-now/', BuyNowView.as_view(), name='buy_now'),

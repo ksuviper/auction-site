@@ -453,6 +453,20 @@ UNFOLD = {
                         "icon": "favorite",
                         "link": reverse_lazy("admin:auctions_wishlist_changelist"),
                     },
+                    {
+                        # Who follows which seller. The alert itself is sent from
+                        # Add Listing, or the action on the Users list.
+                        "title": "Seller Follows",
+                        "icon": "notifications",
+                        "link": reverse_lazy("admin:auctions_sellerfollow_changelist"),
+                    },
+                    {
+                        "title": "Push Devices",
+                        "icon": "phone_iphone",
+                        "link": reverse_lazy(
+                            "admin:auctions_pushsubscription_changelist"
+                        ),
+                    },
                 ],
             },
         ],
@@ -613,6 +627,36 @@ PAYPAL_WEBHOOK_ID = os.getenv('PAYPAL_WEBHOOK_ID', '')
 # ============================================================================
 
 TURNSTILE_SITE_KEY = os.getenv('TURNSTILE_SITE_KEY', '')
+
+# ============================================================================
+# Web Push — phone and browser notifications for members who opt in
+# Email stays the channel every notification goes out on; push is an extra,
+# faster one on top. With these unset the site simply offers no push option.
+#
+# Generate the pair once with `python manage.py generate_vapid_keys` and keep
+# it: browsers tie each subscription to the public key, so replacing the pair
+# silently disconnects every device that has already opted in.
+#
+# As with Turnstile, the private key is read from the environment when a
+# notification is sent (auctions/utils.py) rather than held here.
+# ============================================================================
+
+VAPID_PUBLIC_KEY = os.getenv('VAPID_PUBLIC_KEY', '')
+# A contact address the push services can use if this site misbehaves. Must be
+# a mailto: (or https:) URL — the protocol requires it.
+VAPID_CLAIM_EMAIL = os.getenv('VAPID_CLAIM_EMAIL', '')
+
+# The server makes an outbound request to whatever endpoint a browser hands it,
+# so endpoints are only accepted on the push services browsers actually use.
+# Without this, a member could register an internal address as their "device"
+# and have the server send requests to it.
+WEBPUSH_ALLOWED_HOST_SUFFIXES = (
+    'fcm.googleapis.com',          # Chrome, Edge on Android, most Android browsers
+    'android.googleapis.com',      # older Chrome subscriptions
+    'push.services.mozilla.com',   # Firefox
+    'push.apple.com',              # Safari and installed apps on iPhone/iPad/Mac
+    'notify.windows.com',          # Edge on Windows
+)
 
 # Redirect URLs
 LOGIN_REDIRECT_URL = '/'

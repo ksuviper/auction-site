@@ -24,6 +24,8 @@ from .models import (
     Invoice,
     ListingComment,
     ProxyBid,
+    PushSubscription,
+    SellerFollow,
     SitePage,
     SiteSettings,
     Subscription,
@@ -894,6 +896,73 @@ class WishlistAdmin(ModelAdmin):
     raw_id_fields = ('user',)
 
 
+# ── Notifications ────────────────────────────────────────────────────────────
+
+@admin.register(PushSubscription)
+class PushSubscriptionAdmin(ModelAdmin):
+    """
+    Devices members have turned push on for. Read-mostly: rows are created by
+    the member's browser, and the only useful edit is switching one off.
+    """
+
+    list_display = ('user', 'user_agent', 'created_at', 'is_active')
+    list_filter = ('is_active',)
+    search_fields = ('user__username', 'user__email')
+    raw_id_fields = ('user',)
+    # The endpoint and keys come from the browser and only work as a set; an
+    # edited key just breaks delivery to that device.
+    readonly_fields = ('endpoint', 'p256dh_key', 'auth_key', 'user_agent', 'created_at')
+
+    def has_add_permission(self, request):
+        return False
+
+
+@admin.register(SellerFollow)
+class SellerFollowAdmin(ModelAdmin):
+    list_display = ('user', 'seller', 'created_at')
+    # seller__first_name/last_name stand in for the old Seller.name: a seller
+    # is a User now, and display_name is built from those fields.
+    search_fields = (
+        'user__username', 'user__email',
+        'seller__username', 'seller__first_name', 'seller__last_name',
+    )
+    raw_id_fields = ('user', 'seller')
+    list_select_related = ('user', 'seller')
+
+
+@admin.action(description='Notify followers of new listings (one seller)')
+def notify_followers(modeladmin, request, queryset):
+    """
+    Hand off to the confirmation page for exactly one seller.
+
+    Deliberately not a bulk send: alerts go out per seller, once their week's
+    listings are ready, and the confirmation page says how many people will be
+    emailed and when they were last told before anything is sent.
+    """
+    chosen = list(queryset.select_related('profile')[:2])
+    if len(chosen) != 1:
+        modeladmin.message_user(
+            request,
+            'Choose exactly one seller. Followers are notified one seller at a '
+            'time, once that seller\'s listings are ready.',
+            level=messages.WARNING,
+        )
+        return None
+
+    seller = chosen[0]
+    if not getattr(getattr(seller, 'profile', None), 'is_seller', False):
+        modeladmin.message_user(
+            request,
+            f'{seller.get_username()} is not a seller, so has no followers to notify.',
+            level=messages.WARNING,
+        )
+        return None
+
+    target = reverse('weekly_setup_notify_followers', args=[seller.pk])
+    back = reverse('admin:auth_user_changelist')
+    return redirect(f'{target}?next={back}')
+
+
 # ── Listing comments & questions ─────────────────────────────────────────────
 
 @admin.action(description='Approve selected comments')
@@ -1166,6 +1235,7 @@ class CustomUserAdmin(BaseUserAdmin, ModelAdmin):
     add_form = UserCreationForm
     change_password_form = AdminPasswordChangeForm
     inlines = [UserProfileInline]
+    actions = [notify_followers]
     # Approval decides whether an account can log in, so it belongs on the list
     # people actually browse — not only on the User profiles changelist.
     list_display = BaseUserAdmin.list_display + ('approval_status', 'is_seller')

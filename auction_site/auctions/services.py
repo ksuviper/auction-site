@@ -4,10 +4,11 @@ import logging
 from decimal import Decimal
 
 from django.db import transaction
+from django.urls import reverse
 from django.utils import timezone
 
 from .models import AuctionListing, Bid, ProxyBid
-from .utils import _safe_send
+from .utils import _safe_send, send_push_to_user
 
 logger = logging.getLogger(__name__)
 
@@ -288,6 +289,8 @@ def run_proxy_bids(listing):
 def _notify_outbid(proxy_bid, listing, current_bid):
     user = proxy_bid.bidder
     if not user.email:
+        # No address to email, but a device may still be listening.
+        _push_outbid(user, listing)
         return
     body = f"""\
 You have been outbid on "{listing.title}".
@@ -304,3 +307,133 @@ If you'd still like to win, visit the listing and set a new, higher maximum bid.
         body=body,
         recipients=[user.email],
     )
+    _push_outbid(user, listing)
+
+
+def _push_outbid(user, listing):
+    """
+    The push half of the outbid notice. Additive: the email above has already
+    been sent by the time this is reached, whatever happens here.
+
+    Deferred until the bid commits. run_proxy_bids holds a row lock on the
+    listing, and a push is a network round trip to Google or Apple per device —
+    nobody else should be kept waiting to bid on this plant while that happens.
+    It also means a bid that rolls back never sends an alert about itself.
+    """
+    url = reverse('listing_detail', args=[listing.pk])
+    title = listing.title
+
+    def send():
+        send_push_to_user(
+            user,
+            "You've been outbid",
+            f'Someone bid higher on {title}.',
+            url=url,
+            tag=f'outbid-{listing.pk}',
+        )
+
+    transaction.on_commit(send)
+
+
+# How many plant names the "new listings" email spells out before saying "and
+# N more". A list of forty titles reads as a catalogue rather than a heads-up.
+NEW_LISTINGS_EMAIL_TITLES = 10
+
+
+def notify_followers_of_new_listings(seller, request=None):
+    """
+    Tell everyone following ``seller`` that their new listings are up.
+
+    Manual and per seller, never automatic per listing: an admin presses it
+    once when a seller's week of plants is ready, rather than every follower
+    getting an alert for every plant as it is typed in.
+
+    Every follower gets the email — that is the reliable path and it does not
+    depend on push. Each is then also sent a push, which quietly does nothing
+    for anyone who has not turned push on. The email always goes first, so a
+    push problem cannot stop it.
+
+    Returns a dict of counts for the admin's confirmation message:
+    ``followers``, ``emailed`` (followers with an address), ``pushed`` (devices
+    that accepted a push).
+    """
+    from allauth.utils import build_absolute_uri
+
+    from .models import SellerFollow
+    from .utils import seller_display_name
+
+    seller_name = seller_display_name(seller)
+    path = reverse('seller_listings', args=[seller.pk])
+    link = (
+        request.build_absolute_uri(path) if request is not None
+        else build_absolute_uri(None, path)
+    )
+
+    profile = getattr(seller, 'profile', None)
+    titles = (
+        list(profile.active_listings().values_list('title', flat=True))
+        if profile is not None else []
+    )
+    if titles:
+        shown = titles[:NEW_LISTINGS_EMAIL_TITLES]
+        listed = '\n'.join(f'  • {title}' for title in shown)
+        if len(titles) > len(shown):
+            listed += f'\n  …and {len(titles) - len(shown)} more'
+        listing_block = f'Now listed:\n\n{listed}\n'
+    else:
+        listing_block = ''
+
+    followers = (
+        SellerFollow.objects
+        # A deactivated account has been switched off by an admin; it should
+        # not keep receiving club mail just because it once followed someone.
+        .filter(seller=seller, user__is_active=True)
+        .select_related('user')
+        .order_by('pk')
+    )
+
+    counts = {'followers': 0, 'emailed': 0, 'pushed': 0}
+    for follow in followers:
+        follower = follow.user
+        counts['followers'] += 1
+
+        if follower.email:
+            body = f"""\
+Hello {follower.get_full_name() or follower.username},
+
+{seller_name} has new plants up for auction.
+
+{listing_block}
+See everything {seller_name} has listed:
+{link}
+
+You're receiving this because you follow {seller_name}. To stop, open their
+page and choose "Unfollow", or manage the sellers you follow from your
+notification settings.
+
+-- ASQ Daylily Auction Group
+"""
+            _safe_send(
+                subject=f'New listings from {seller_name}',
+                body=body,
+                recipients=[follower.email],
+            )
+            counts['emailed'] += 1
+
+        counts['pushed'] += send_push_to_user(
+            follower,
+            f'New listings from {seller_name}',
+            'Their latest plants are up for auction.',
+            url=path,
+            tag=f'new-listings-{seller.pk}',
+        )
+
+    if profile is not None:
+        type(profile).objects.filter(pk=profile.pk).update(
+            followers_notified_at=timezone.now()
+        )
+
+    logger.info(
+        'Followers of seller %s notified: %s', seller.pk, counts,
+    )
+    return counts

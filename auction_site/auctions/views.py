@@ -34,12 +34,13 @@ from .models import (
     Invoice,
     ListingComment,
     ProxyBid,
+    SellerFollow,
     SitePage,
     UserProfile,
 )
 from .queries import sellers_in_category
 from .services import run_proxy_bids
-from .utils import _safe_send, has_active_subscription
+from .utils import _safe_send, has_active_subscription, send_push_to_user
 
 User = get_user_model()
 
@@ -288,6 +289,12 @@ class SellerListingView(ListView):
         ctx = super().get_context_data(**kwargs)
         ctx['seller'] = self.seller
         ctx['seller_profile'] = self.seller.profile
+        user = self.request.user
+        ctx['is_own_page'] = user.is_authenticated and user.pk == self.seller.pk
+        ctx['is_following'] = (
+            user.is_authenticated
+            and SellerFollow.objects.filter(user=user, seller=self.seller).exists()
+        )
         return ctx
 
 
@@ -595,6 +602,7 @@ class BuyNowView(LoginRequiredMixin, View):
 
         # Emails are sent after the transaction commits.
         self._send_purchase_emails(listing, request.user, invoice)
+        self._send_purchase_pushes(listing, request.user, invoice)
         # No promise of payment details: an admin combines everything this
         # buyer owes this seller into one invoice and sends that, and it is the
         # only bill they get. Saying "pay now" here would ask twice.
@@ -605,6 +613,29 @@ class BuyNowView(LoginRequiredMixin, View):
             'seller.',
         )
         return redirect('invoice_detail', pk=invoice.pk)
+
+    def _send_purchase_pushes(self, listing, buyer, invoice):
+        """
+        Push alerts after the emails, additive and best-effort.
+
+        The buyer's is a receipt that reaches their other devices; it says the
+        bill follows and asks for nothing. send_push_to_user never raises, so
+        the purchase, which has already committed, cannot be affected.
+        """
+        send_push_to_user(
+            buyer,
+            f'Purchase confirmed: {listing.title}',
+            'Your invoice will follow by email.',
+            url=reverse('invoice_detail', args=[invoice.pk]),
+            tag=f'bought-{invoice.pk}',
+        )
+        send_push_to_user(
+            listing.seller,
+            f'Your item sold: {listing.title}',
+            f'{invoice.quantity} bought. {listing.units_remaining} still in stock.',
+            url=reverse('listing_detail', args=[listing.pk]),
+            tag=f'sold-{invoice.pk}',
+        )
 
     def _send_purchase_emails(self, listing, buyer, invoice):
         """

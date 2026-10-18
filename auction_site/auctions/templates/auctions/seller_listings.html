@@ -40,6 +40,40 @@
             {% endif %}
           </div>
         </div>
+        {% comment %}
+          Following is how a buyer hears about this seller's next batch of
+          plants: an email always, and a push too if they have turned that on.
+          A plain POST form, so it works with JavaScript off.
+        {% endcomment %}
+        {% if not is_own_page %}
+        <div class="mb-3" id="follow-seller">
+          {% if request.user.is_authenticated %}
+            {% if is_following %}
+            <form method="post" action="{% url 'unfollow_seller' seller.pk %}" class="d-inline">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.path }}">
+              <button type="submit" class="btn btn-success btn-lg"
+                      aria-label="Following {{ seller_profile.display_name }}. Select to unfollow.">
+                Following ✓
+              </button>
+            </form>
+            <span class="text-muted ms-2">You'll hear when their new listings go live.</span>
+            {% else %}
+            <form method="post" action="{% url 'follow_seller' seller.pk %}" class="d-inline">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.path }}">
+              <button type="submit" class="btn btn-outline-primary btn-lg">
+                <i class="fas fa-bell me-2" aria-hidden="true"></i>Follow this seller for new listing alerts
+              </button>
+            </form>
+            {% endif %}
+          {% else %}
+          <a href="{% url 'account_login' %}?next={{ request.path|urlencode }}" class="btn btn-outline-primary btn-lg">
+            <i class="fas fa-bell me-2" aria-hidden="true"></i>Log in to follow this seller
+          </a>
+          {% endif %}
+        </div>
+        {% endif %}
         {% if seller_profile.seller_bio %}
         <p class="fs-5 mb-3">{{ seller_profile.seller_bio }}</p>
         {% endif %}

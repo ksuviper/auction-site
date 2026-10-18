@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}Notify Followers – {{ seller.profile.display_name }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-lg-8">
+
+    <h1 class="h2 mb-1">Notify followers of new listings</h1>
+    <p class="text-muted fs-5 mb-4">
+      Seller: <strong>{{ seller.profile.display_name }}</strong>
+    </p>
+
+    <div class="card shadow-sm mb-4">
+      <div class="card-body p-4 fs-5" style="line-height:1.8;">
+
+        {% if follower_count %}
+        <p>
+          This emails <strong>{{ follower_count }} follower{{ follower_count|pluralize }}</strong>
+          to say {{ seller.profile.display_name }} has new plants up, with a
+          link to their page.
+          {% if push_follower_count %}
+          {{ push_follower_count }} of them {{ push_follower_count|pluralize:"has,have" }}
+          phone or browser alerts on and will get one of those too.
+          {% endif %}
+        </p>
+        {% else %}
+        <p class="mb-0">
+          Nobody follows {{ seller.profile.display_name }} yet, so there is no
+          one to notify. Members follow a seller from the seller's own page.
+        </p>
+        {% endif %}
+
+        {% if seller.profile.followers_notified_at %}
+        <div class="alert alert-warning" role="note">
+          <i class="fas fa-clock me-2" aria-hidden="true"></i>
+          Followers were last notified
+          <strong>{{ seller.profile.followers_notified_at|timesince }} ago</strong>
+          ({{ seller.profile.followers_notified_at|date:"M j, g:i a" }}).
+          Send again only if there is a new batch of plants since then.
+        </div>
+        {% endif %}
+
+        <p class="text-muted">
+          Send this once, when the week's listings for this seller are all in —
+          not after each plant. Every send is an email to every follower.
+        </p>
+
+        <h2 class="h6 fw-bold">Open listings they will see ({{ listings|length }})</h2>
+        {% if listings %}
+        <ul class="mb-4">
+          {% for listing in listings|slice:":10" %}
+          <li>{{ listing.title }}</li>
+          {% endfor %}
+          {% if listings|length > 10 %}
+          <li class="text-muted">…and {{ listings|length|add:"-10" }} more</li>
+          {% endif %}
+        </ul>
+        {% else %}
+        <div class="alert alert-secondary" role="note">
+          This seller has no open listings right now, so followers would be sent
+          to an empty page. Add the listings first.
+        </div>
+        {% endif %}
+
+        <form method="post" class="d-flex flex-column flex-sm-row gap-2">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{{ next }}">
+          {% if follower_count %}
+          <button type="submit" class="btn btn-primary btn-lg fw-semibold">
+            <i class="fas fa-paper-plane me-2" aria-hidden="true"></i>Send to {{ follower_count }} follower{{ follower_count|pluralize }}
+          </button>
+          {% endif %}
+          <a href="{{ next }}" class="btn btn-outline-secondary btn-lg">Cancel</a>
+        </form>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

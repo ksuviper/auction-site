@@ -15,10 +15,11 @@ import logging
 from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.db import transaction
+from django.urls import reverse
 from django.utils import timezone
 
 from auctions.models import AuctionListing, Invoice
-from auctions.utils import _safe_send, seller_display_name
+from auctions.utils import _safe_send, send_push_to_user, seller_display_name
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,7 @@ class Command(BaseCommand):
                 # Email sending is outside the transaction so a failed email
                 # does not roll back the close/invoice.
                 self._send_notifications(listing, winner, invoice)
+                self._send_pushes(listing, winner, invoice)
             except Exception:
                 errors += 1
                 logger.exception('Error closing listing pk=%d "%s"', listing.pk, listing.title)
@@ -175,6 +177,42 @@ class Command(BaseCommand):
             self._email_admin(listing, top_bid, invoice)
         else:
             self._email_admin_no_bids(listing)
+
+    # ── Push notifications ───────────────────────────────────────────────────
+
+    def _send_pushes(self, listing, top_bid, invoice):
+        """
+        The push alerts, after the emails and strictly best-effort.
+
+        send_push_to_user never raises, and this guards it again anyway: the
+        listing is already closed and invoiced by now, and a push problem must
+        not be counted as a failure to close it.
+
+        The winner gets a push even though they get no email at close (see
+        _send_notifications). It tells them they won and that the bill follows;
+        it does not ask for money, and the invoice page it opens says there is
+        nothing to pay until the combined invoice is sent.
+        """
+        if listing.listing_type == 'buy_now' or not top_bid:
+            return
+        try:
+            if invoice is not None:
+                send_push_to_user(
+                    top_bid.bidder,
+                    f'You won {listing.title}!',
+                    'Your invoice will follow by email.',
+                    url=reverse('invoice_detail', args=[invoice.pk]),
+                    tag=f'won-{listing.pk}',
+                )
+            send_push_to_user(
+                listing.seller,
+                f'Your listing {listing.title} sold.',
+                f'Winning bid ${top_bid.amount}.',
+                url=reverse('listing_detail', args=[listing.pk]),
+                tag=f'sold-{listing.pk}',
+            )
+        except Exception:
+            logger.exception('Push notifications failed for listing pk=%d', listing.pk)
 
     def _email_seller(self, listing, top_bid):
         """

@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .weekly_setup_views import (
+    NotifyFollowersView,
     WeeklyListingCreateView,
     WeeklySetupDoneView,
     WeeklySetupSellerView,
@@ -16,4 +17,9 @@ urlpatterns = [
         name='weekly_setup_listings',
     ),
     path('<int:seller_pk>/done/', WeeklySetupDoneView.as_view(), name='weekly_setup_done'),
+    path(
+        '<int:seller_pk>/notify-followers/',
+        NotifyFollowersView.as_view(),
+        name='weekly_setup_notify_followers',
+    ),
 ]

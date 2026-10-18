@@ -175,14 +175,16 @@ class PwaStillIntactTests(TestCase):
             self.client.get(reverse('pwa_manifest')).status_code, 200
         )
 
-    def test_the_service_worker_is_untouched(self):
+    def test_the_service_worker_version_moved_on_only_for_push(self):
         """
-        This task adds no caching and does not change sw.js, so
-        SERVICE_WORKER_VERSION should not have needed bumping.
+        The install bar changed nothing in sw.js and left the version at v1.
+        Push notifications did change sw.js, so they bumped it to v2 — and any
+        later change to the worker must bump it again, or installed phones keep
+        running the old copy.
         """
         from auction_site.pwa import SERVICE_WORKER_VERSION
 
-        self.assertEqual(SERVICE_WORKER_VERSION, 'v1')
+        self.assertEqual(SERVICE_WORKER_VERSION, 'v2')
 
     def test_the_worker_still_caches_only_the_offline_page(self):
         worker = self.client.get('/sw.js').content.decode()

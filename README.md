@@ -42,6 +42,8 @@ A "seller" is a user account with the seller flag ticked — see
   category page
 - Admin-managed FAQ, About Us, Terms of Service and Privacy Policy pages
 - Admin-uploaded header banner and app icon, as separate images
+- Follow a seller to be emailed when their new listings go live, plus optional
+  phone/browser push alerts on top of email (see [Notifications](#notifications))
 - Mobile-first Bootstrap 5 UI with offcanvas category sidebar
 
 ---
@@ -162,6 +164,9 @@ Visit `http://localhost:8000`. Log in at `/admin/` with your superuser credentia
 | `CF_R2_CUSTOM_DOMAIN` | No | — | Optional public domain serving the bucket |
 | `TURNSTILE_SITE_KEY` | Yes in production | — | Cloudflare Turnstile public site key; the widget is hidden when unset |
 | `TURNSTILE_SECRET` | Yes in production | — | Turnstile secret key. **With `DEBUG=False` and no secret, every email/password signup is rejected.** |
+| `VAPID_PUBLIC_KEY` | For push | — | Web Push public key from `generate_vapid_keys`. Unset means no push option is offered; email is unaffected |
+| `VAPID_PRIVATE_KEY` | For push | — | Web Push private key. **Secret.** Read from the environment at send time, never held in settings |
+| `VAPID_CLAIM_EMAIL` | For push | — | `mailto:` contact address the push services can reach you on |
 | `SECURE_SSL_REDIRECT` | No | `False` | Set `True` in production behind HTTPS |
 | `SECURE_HSTS_SECONDS` | No | `0` | Set `31536000` after HTTPS is confirmed working |
 | `SECURE_HSTS_INCLUDE_SUBDOMAINS` | No | `False` | Extend HSTS to subdomains |
@@ -1112,10 +1117,8 @@ decide whether to keep an app, then scrolls away.
 Nothing here is load-bearing: with JavaScript off the site is unchanged and the
 browser's own install route still works.
 
-> **Push notifications are a separate, not-yet-built feature**, tracked as its
-> own backlog item. When it lands it will need to extend the service worker
-> described below with `push` and `notificationclick` handlers, and bump
-> `SERVICE_WORKER_VERSION`. The install bar did not touch the worker at all.
+The install bar did not touch the service worker. Push notifications (below)
+did, and bumped `SERVICE_WORKER_VERSION` to `v2` when they did.
 
 ### What the service worker deliberately does not do
 
@@ -1144,6 +1147,113 @@ a 20000-pixel PNG.
 A non-square image is letterboxed on a white square rather than squashed. The
 maskable pair insets the artwork to 60% of the width, which is the share that
 survives a circular crop.
+
+---
+
+## Notifications
+
+**Email is the primary channel and is always sent.** Outbid alerts, sale
+notices, invoices and new-listing announcements all go out by email exactly as
+before, whether or not a member ever touches the settings below.
+
+**Push is a bonus channel on top.** A member can turn on lock-screen alerts for
+a phone or computer, and from then on the same events also arrive as a system
+notification. It matters most on iPhone, where a web app gets no other way to
+tap someone on the shoulder — but there it only works once the site has been
+added to the Home Screen (iOS 16.4 or later), and the settings page says so
+instead of showing a button that cannot work.
+
+| Event | Email (unchanged) | Push (new, additive) |
+|---|---|---|
+| Outbid by an automatic bid | The bidder | The bidder, linking to the listing |
+| Auction closes with a winner | The seller and the admin | The winner ("You won …", linking to their invoice page, which says nothing is due yet) and the seller |
+| Buy It Now purchase | The seller and the admin | The buyer (a receipt) and the seller |
+| Notify followers of new listings | **Every follower** (new email) | Followers who have push on |
+
+The email is always sent first, and a push failure is logged and swallowed: it
+cannot stop an email, a bid, a purchase or an auction closing.
+
+### One-time setup: VAPID keys
+
+Push needs a key pair that identifies this site to Google, Apple and Mozilla's
+push services. Generate it **once**:
+
+```bash
+python manage.py generate_vapid_keys
+```
+
+Paste the three lines it prints into `.env` (`VAPID_PUBLIC_KEY`,
+`VAPID_PRIVATE_KEY`, `VAPID_CLAIM_EMAIL` — set the last to a real `mailto:`
+address). The command writes nothing to disk, so the private key cannot end up
+in a committed file.
+
+**Do not regenerate it on deploy.** Every device that has turned push on is
+tied to the public key; a new pair silently disconnects all of them and each
+member would have to turn notifications on again. Keep the pair with the site's
+other secrets. Until the keys are set, the settings page says alerts are not
+available yet and nothing tries to send.
+
+Push needs HTTPS, like installing does.
+
+### Where members manage it
+
+**My Profile → Manage Notifications** (also linked from Login & Security) opens
+`/account/notifications/`, which has:
+
+- **Email** — always on, with what it covers.
+- **Alerts on this phone or computer** — *Enable Notifications*, or the Add to
+  Home Screen steps on an iPhone in a Safari tab, or a note if the browser
+  cannot do push or has blocked it. Once on: *Disable notifications on this
+  device*, plus a list of every device with alerts on and a *Turn off* button
+  for each (for a lost or replaced phone).
+- **Sellers you follow** — each with *Unfollow*.
+
+### Following sellers
+
+A member follows a seller from the seller's own page — **Follow this seller
+for new listing alerts**, which becomes **Following ✓** — and can unfollow there
+or from the settings page. Following is independent of push: a follower who
+never turns push on still gets the email.
+
+### Notify followers of new listings
+
+Nothing is announced automatically when a listing is added. An admin sends the
+announcement, per seller, from either:
+
+- **Add Listing** — the *Notify followers of new listings* panel on the page
+  where that seller's listings are entered, and on the Done page; or
+- **Users** in the admin — tick **one** seller and run the *Notify followers of
+  new listings (one seller)* action.
+
+Both open the same confirmation page, which shows how many followers will be
+emailed, how many also get a push, the open listings they will see, and **when
+followers were last notified**. Nothing is sent until *Send* is pressed.
+
+Use it **once per seller per week**, when that seller's batch of listings is all
+in — not after each plant. Every send is an email to every follower, and a
+member who gets one per plant will unfollow.
+
+### For developers
+
+- `send_push_to_user(user, title, body, url='/')` in `auctions/utils.py` is the
+  only way to send. It never raises, quietly does nothing for a member with no
+  device or a site with no keys, and switches a device off when the push
+  service answers 404 or 410 (uninstalled, data cleared, permission revoked).
+  Other failures are logged and the device is kept. It is separate from
+  `_safe_send`, which stays email-only.
+- The outbid push waits for the bid's transaction to commit, so no network call
+  is made while the listing row is locked, and a rolled-back bid never alerts.
+- Devices are `PushSubscription` rows (admin: **Users → Push Devices**);
+  follows are `SellerFollow` rows (**Users → Seller Follows**).
+- The server makes an outbound request to every stored endpoint, so only HTTPS
+  endpoints on the real push services (`WEBPUSH_ALLOWED_HOST_SUFFIXES` in
+  settings) are accepted, and the browser's key must be a real P-256 point.
+  Otherwise a member could register an internal address as their "device".
+- An account may have 10 active devices; subscribing an eleventh switches the
+  oldest off.
+- `sw.js` gained `push` and `notificationclick` handlers and nothing else; it
+  still caches only the offline page. A notification can only open a page on
+  this site.
 
 ---
 

@@ -1,10 +1,13 @@
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View
 
 from .mixins import StaffRequiredMixin
-from .services import copy_listing
+from .models import PushSubscription, SellerFollow
+from .services import copy_listing, notify_followers_of_new_listings
 from .weekly_setup_forms import AuctionListingForm, WeeklySellerForm, seller_queryset
 
 User = get_user_model()
@@ -196,3 +199,61 @@ class WeeklySetupDoneView(StaffRequiredMixin, View):
         seller = get_seller_or_404(seller_pk)
         listings = seller.listings.filter(is_closed=False).order_by('starts_at')
         return render(request, self.template_name, {'seller': seller, 'listings': listings})
+
+
+class NotifyFollowersView(StaffRequiredMixin, View):
+    """
+    "Notify followers of new listings" for one seller, with a confirmation step.
+
+    Reached from two places — the button on Add Listing, and the action on the
+    admin's Users list — and both land here, so there is one confirmation page
+    and one way of sending. GET shows who would be told and when they last
+    were; only the POST sends anything. Emails cannot be unsent, which is why
+    neither entry point sends on its own.
+    """
+
+    template_name = 'weekly_setup/notify_followers.html'
+
+    def _next(self, request, seller):
+        target = request.POST.get('next') or request.GET.get('next') or ''
+        if target and url_has_allowed_host_and_scheme(
+            target,
+            allowed_hosts={request.get_host()},
+            require_https=request.is_secure(),
+        ):
+            return target
+        return reverse('weekly_setup_listings', args=[seller.pk])
+
+    def get(self, request, seller_pk):
+        seller = get_seller_or_404(seller_pk)
+        followers = SellerFollow.objects.filter(seller=seller, user__is_active=True)
+        with_push = (
+            PushSubscription.objects
+            .filter(is_active=True, user__in=followers.values('user'))
+            .values('user')
+            .distinct()
+            .count()
+        )
+        return render(request, self.template_name, {
+            'seller': seller,
+            'follower_count': followers.count(),
+            'push_follower_count': with_push,
+            'listings': seller.profile.active_listings(),
+            'next': self._next(request, seller),
+        })
+
+    def post(self, request, seller_pk):
+        seller = get_seller_or_404(seller_pk)
+        counts = notify_followers_of_new_listings(seller, request=request)
+        name = seller.profile.display_name
+
+        if not counts['followers']:
+            messages.info(request, f'Nobody follows {name} yet, so no one was notified.')
+        else:
+            messages.success(
+                request,
+                f'Told {counts["followers"]} follower{"s" if counts["followers"] != 1 else ""} '
+                f'of {name} about their new listings: {counts["emailed"]} by email, '
+                f'{counts["pushed"]} phone or browser alert{"s" if counts["pushed"] != 1 else ""}.',
+            )
+        return redirect(self._next(request, seller))

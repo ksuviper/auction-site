@@ -126,6 +126,13 @@ class UserProfile(models.Model):
         default=True,
         help_text='Email this seller when a buyer posts a question on their listing.',
     )
+    # Set by "Notify followers of new listings". Shown next to the button so an
+    # admin can see the week's alert has already gone out before sending it a
+    # second time to the same people.
+    followers_notified_at = models.DateTimeField(
+        null=True, blank=True, editable=False,
+        help_text='When this seller\'s followers were last told about new listings.',
+    )
 
     # Field name -> the label a buyer sees. Ordered by how commonly these get
     # used for plant sales, since that is the order they are read in.
@@ -1145,6 +1152,102 @@ class Subscription(models.Model):
         return f'{self.user.username} – {self.get_plan_display()} ({self.status})'
 
 
+# ── Notifications ────────────────────────────────────────────────────────────
+
+class PushSubscription(models.Model):
+    """
+    One device or browser a member has turned push notifications on for.
+
+    The endpoint, p256dh and auth values are what the browser hands back from
+    pushManager.subscribe(). Together they are the address and encryption keys
+    for that one browser; none of them is a secret worth protecting on its own,
+    but the endpoint is unguessable, which is what stops anyone else pushing to
+    it.
+
+    Push is an extra channel on top of email, never instead of it. A member
+    with no rows here gets exactly the emails they always did.
+    """
+
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='push_subscriptions'
+    )
+    endpoint = models.URLField(max_length=500, unique=True)
+    p256dh_key = models.CharField(max_length=255)
+    auth_key = models.CharField(max_length=255)
+    user_agent = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text=(
+            'Stored for the user\'s own reference on the settings page, e.g. '
+            '"Chrome on Android" — not used for logic.'
+        ),
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_active = models.BooleanField(
+        default=True,
+        help_text=(
+            'Cleared when the member turns notifications off on this device, or '
+            'when the push service reports the subscription has expired.'
+        ),
+    )
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'push notification device'
+
+    def __str__(self) -> str:
+        return f'{self.user.username} – {self.user_agent or "device"}'
+
+    def as_subscription_info(self) -> dict:
+        """The shape pywebpush.webpush() takes."""
+        return {
+            'endpoint': self.endpoint,
+            'keys': {'p256dh': self.p256dh_key, 'auth': self.auth_key},
+        }
+
+
+class SellerFollow(models.Model):
+    """
+    A member asking to hear when a particular seller's new listings go live.
+
+    Drives the "New listings from …" email and push. Only a seller's followers
+    are told — there is no blanket announcement to everyone. Independent of
+    push: a follower who never turns push on still gets the email.
+    """
+
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='seller_follows'
+    )
+    seller = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='followers',
+        limit_choices_to={'profile__is_seller': True},
+        help_text=(
+            'A user account flagged as a seller. There is no separate Seller '
+            'model; sellers are users whose profile has "is seller" ticked.'
+        ),
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user', 'seller'], name='one_follow_per_user_and_seller'
+            ),
+            # Being told about your own listings is noise, and the follow button
+            # is not offered on your own page — this keeps the admin honest too.
+            models.CheckConstraint(
+                condition=~models.Q(user=models.F('seller')),
+                name='cannot_follow_yourself',
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f'{self.user.username} follows {self.seller.username}'
+
+
 # ── Deleting accounts ────────────────────────────────────────────────────────
 
 class ProfileDeletionNotAllowed(Exception):
@@ -1168,8 +1271,8 @@ def user_activity(user):
 
     Deliberately not listed, because these belong to the account rather than to
     the club's records and should go when it does: the profile itself, wishlist
-    entries, email addresses, social logins, MFA authenticators and admin log
-    entries.
+    entries, email addresses, social logins, MFA authenticators, admin log
+    entries, push notification devices and followed sellers.
     """
     if user is None or user.pk is None:
         return []

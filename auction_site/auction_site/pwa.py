@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 # Bumping this retires every cached copy the moment the new worker activates.
 # Change it whenever sw.js changes, or phones keep running the old one.
-SERVICE_WORKER_VERSION = 'v1'
+SERVICE_WORKER_VERSION = 'v2'  # v2: push and notificationclick handlers
 
 # The two sizes a browser insists on. Requests for anything else 404 rather
 # than resize on demand: the size comes straight off the URL, and an open-ended
@@ -223,6 +223,10 @@ def service_worker(request):
         {
             'version': SERVICE_WORKER_VERSION,
             'offline_url': reverse('pwa_offline'),
+            # The generated icon, the same URL the manifest uses. There are no
+            # icon files under /static/; they are cut from the branding row.
+            'icon_url': reverse('pwa_icon', args=[192]),
+            'default_title': _settings_row().site_name or FALLBACK_NAME,
         },
         content_type='application/javascript',
     )

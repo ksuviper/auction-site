@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Notifications – ASQ Daylily Auctions{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-lg-8">
+
+    <h1 class="fw-bold mb-1">Notifications</h1>
+    <p class="text-muted mb-4">How we let you know when something happens</p>
+
+    <!-- Email: always on -->
+    <div class="card shadow-sm mb-4">
+      <div class="card-body p-4 fs-5" style="line-height:1.8;">
+        <h2 class="h5 fw-bold mb-3">
+          <i class="fas fa-envelope me-2" aria-hidden="true"></i>Email
+          <span class="badge bg-success fs-6 ms-2">Always on</span>
+        </h2>
+        <p class="mb-0">
+          Email is how we reach you about everything: being outbid, your
+          invoices, and new listings from sellers you follow. Nothing on this
+          page changes that.
+        </p>
+      </div>
+    </div>
+
+    <!-- Push: this device -->
+    <div class="card shadow-sm mb-4">
+      <div class="card-body p-4 fs-5" style="line-height:1.8;">
+        <h2 class="h5 fw-bold mb-3">
+          <i class="fas fa-bell me-2" aria-hidden="true"></i>Alerts on this phone or computer
+        </h2>
+        <p>
+          An optional extra on top of email: a notification on your lock screen
+          the moment you're outbid, win, or a seller you follow lists new
+          plants.
+        </p>
+
+        {% if not push_configured %}
+        <p class="text-muted mb-0">Phone alerts aren't available on this site yet.</p>
+        {% else %}
+        {% comment %}
+          Every state is rendered hidden and notifications.js unhides the one
+          that applies, since only the browser knows whether it supports push,
+          whether this is an installed app, and what permission it holds. With
+          JavaScript off the "checking" line is all that shows, which is true.
+        {% endcomment %}
+        <div id="push-settings"
+             data-vapid-key="{{ vapid_public_key }}"
+             data-subscribe-url="{% url 'push_subscribe' %}"
+             data-unsubscribe-url="{% url 'push_unsubscribe' %}"
+             data-csrf="{{ csrf_token }}">
+
+          <p data-push-state="checking" class="text-muted mb-0">
+            Checking whether this browser supports notifications…
+          </p>
+
+          <div data-push-state="ios-install" hidden>
+            <p>
+              On iPhone and iPad, notifications only work once the site is on
+              your Home Screen. In Safari, tap the Share icon
+              (<i class="fas fa-arrow-up-from-bracket" aria-hidden="true"></i><span class="visually-hidden">a square with an arrow pointing up</span>),
+              then <strong>Add to Home Screen</strong>. Open the site from the
+              new icon and come back to this page to turn notifications on.
+            </p>
+            <p class="text-muted mb-0">Needs iOS 16.4 or later.</p>
+          </div>
+
+          <p data-push-state="unsupported" class="text-muted mb-0" hidden>
+            This browser doesn't support notifications. You'll still get every
+            update by email.
+          </p>
+
+          <div data-push-state="denied" hidden>
+            <p class="mb-0">
+              Notifications are blocked for this site in your browser settings.
+              To turn them on, allow notifications for this site there, then
+              reload this page. You'll still get every update by email.
+            </p>
+          </div>
+
+          <div data-push-state="enable" hidden>
+            <button type="button" class="btn btn-primary btn-lg fw-semibold" data-push-action="enable">
+              <i class="fas fa-bell me-2" aria-hidden="true"></i>Enable Notifications
+            </button>
+          </div>
+
+          <div data-push-state="enabled" hidden>
+            <p>
+              <span class="badge bg-success fs-6">On</span>
+              Notifications are on for this device.
+            </p>
+            <button type="button" class="btn btn-outline-secondary btn-lg" data-push-action="disable">
+              Disable notifications on this device
+            </button>
+          </div>
+
+          <div data-push-state="busy" hidden>
+            <p class="text-muted mb-0">One moment…</p>
+          </div>
+
+          <div class="alert mt-3 mb-0" data-push-message role="status" hidden></div>
+        </div>
+        {% endif %}
+
+        {% if devices %}
+        <h3 class="h6 fw-bold mt-4 mb-2">Devices with notifications on</h3>
+        <ul class="list-group">
+          {% for device in devices %}
+          <li class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <span>
+              {{ device.user_agent|default:"Unknown device" }}
+              <span class="text-muted small d-block">Since {{ device.created_at|date:"M j, Y" }}</span>
+            </span>
+            <form method="post" action="{% url 'push_device_remove' device.pk %}">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-outline-secondary">Turn off</button>
+            </form>
+          </li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Sellers followed -->
+    <div class="card shadow-sm mb-4" id="followed-sellers">
+      <div class="card-body p-4 fs-5" style="line-height:1.8;">
+        <h2 class="h5 fw-bold mb-3">
+          <i class="fas fa-store me-2" aria-hidden="true"></i>Sellers you follow
+        </h2>
+        <p>
+          When a seller you follow has new plants up, we email you — and send an
+          alert too, if you've turned them on above.
+        </p>
+
+        {% if follows %}
+        <ul class="list-group">
+          {% for follow in follows %}
+          <li class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2">
+            {% if follow.seller.profile.is_seller %}
+            <a href="{% url 'seller_listings' follow.seller.pk %}">{{ follow.seller.profile.display_name }}</a>
+            {% else %}
+            <span>{{ follow.seller.profile.display_name }}</span>
+            {% endif %}
+            <form method="post" action="{% url 'unfollow_seller' follow.seller.pk %}">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.path }}">
+              <button type="submit" class="btn btn-sm btn-outline-secondary"
+                      aria-label="Unfollow {{ follow.seller.profile.display_name }}">Unfollow</button>
+            </form>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="text-muted mb-0">
+          You aren't following anyone yet. Open a seller's page and choose
+          <strong>Follow this seller</strong> to hear when their new listings go
+          live.
+        </p>
+        {% endif %}
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ active_endpoints|json_script:"push-active-endpoints" }}
+<script src="{% static 'js/notifications.js' %}"></script>
+{% endblock %}

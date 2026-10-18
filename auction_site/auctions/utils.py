@@ -293,3 +293,140 @@ def update_paypal_plan_price(plan, new_price):
         plan.paypal_plan_id, plan.currency, new_price,
     )
     return True
+
+
+# ── Push notifications ───────────────────────────────────────────────────────
+#
+# Separate from _safe_send on purpose. Email is the channel every notification
+# goes out on; push is an extra one for members who turned it on, and nothing
+# about it may ever stop or delay an email.
+
+# How long a push service keeps trying to deliver to a phone that is off or out
+# of signal. Long enough to survive a night with the phone off; short enough
+# that "you've been outbid" does not turn up two days after the auction closed.
+PUSH_TTL_SECONDS = 60 * 60 * 12
+
+# Per device. A slow push service holds up whatever request is sending, so this
+# is kept well under what a member would notice on a bid or a purchase.
+PUSH_TIMEOUT_SECONDS = 5
+
+# What a push service answers once a subscription is gone for good: the member
+# uninstalled the app, cleared site data or revoked permission. Retrying those
+# only spends time, so the row is switched off. Anything else (a 5xx, a 429, a
+# timeout) is treated as temporary and the subscription is kept.
+PUSH_GONE_STATUSES = (404, 410)
+
+
+def push_is_configured() -> bool:
+    """Both halves of the VAPID pair are set, so sending can work at all."""
+    return bool(settings.VAPID_PUBLIC_KEY and os.getenv('VAPID_PRIVATE_KEY', ''))
+
+
+def is_allowed_push_endpoint(endpoint) -> bool:
+    """
+    Whether ``endpoint`` is on a push service browsers really use.
+
+    The server makes an outbound HTTPS request to every stored endpoint. Taking
+    any URL a browser sends would let a member register an internal address
+    as their "device" and have the server call it, so only HTTPS endpoints on
+    the hosts in WEBPUSH_ALLOWED_HOST_SUFFIXES are accepted.
+    """
+    from urllib.parse import urlsplit
+
+    try:
+        parts = urlsplit(endpoint or '')
+    except ValueError:
+        return False
+    host = (parts.hostname or '').lower()
+    if parts.scheme != 'https' or not host:
+        return False
+    return any(
+        host == suffix or host.endswith('.' + suffix)
+        for suffix in settings.WEBPUSH_ALLOWED_HOST_SUFFIXES
+    )
+
+
+def send_push_to_user(user, title, body, url='/', tag=None) -> int:
+    """
+    Send a push notification to every device ``user`` has turned it on for.
+
+    Returns how many devices accepted it. Never raises: this is called right
+    after an email in the middle of bidding, buying and closing auctions, and a
+    push problem must not be able to break any of those. Failures are logged.
+
+    A member with no active subscriptions, or a site with no VAPID keys, is a
+    quiet no-op — callers do not check first, they just call it.
+
+    ``url`` is opened when the notification is tapped. ``tag`` lets a newer
+    notification replace an older one on the device rather than stacking, so
+    three outbids on one plant show as one alert.
+    """
+    import json
+
+    try:
+        if user is None or not push_is_configured():
+            return 0
+
+        from .models import PushSubscription
+
+        subscriptions = list(
+            PushSubscription.objects.filter(user=user, is_active=True)
+        )
+        if not subscriptions:
+            return 0
+
+        from pywebpush import WebPushException, webpush
+
+        payload = {'title': title, 'body': body, 'url': url}
+        if tag:
+            payload['tag'] = tag
+        data = json.dumps(payload)
+        private_key = os.getenv('VAPID_PRIVATE_KEY', '')
+        claims = {'sub': settings.VAPID_CLAIM_EMAIL or 'mailto:noreply@localhost'}
+    except Exception:
+        logger.exception('Could not prepare a push notification for user %s',
+                         getattr(user, 'pk', None))
+        return 0
+
+    sent = 0
+    for subscription in subscriptions:
+        try:
+            webpush(
+                subscription_info=subscription.as_subscription_info(),
+                data=data,
+                vapid_private_key=private_key,
+                # A fresh dict each time: pywebpush adds an "aud" claim for the
+                # endpoint's host, which must not leak to the next device.
+                vapid_claims=dict(claims),
+                ttl=PUSH_TTL_SECONDS,
+                timeout=PUSH_TIMEOUT_SECONDS,
+            )
+            sent += 1
+        except WebPushException as exc:
+            status = getattr(exc, 'status_code', None)
+            if status in PUSH_GONE_STATUSES:
+                logger.info(
+                    'Push subscription %s for user %s is gone (%s); switching it off.',
+                    subscription.pk, subscription.user_id, status,
+                )
+                try:
+                    PushSubscription.objects.filter(pk=subscription.pk).update(
+                        is_active=False
+                    )
+                except Exception:
+                    logger.exception(
+                        'Could not deactivate push subscription %s', subscription.pk
+                    )
+            else:
+                # Not logging str(exc): it carries the push service's response
+                # text, and the endpoint is enough to find the device.
+                logger.warning(
+                    'Push to subscription %s for user %s failed (status %s).',
+                    subscription.pk, subscription.user_id, status,
+                )
+        except Exception:
+            logger.exception(
+                'Push to subscription %s for user %s failed.',
+                subscription.pk, subscription.user_id,
+            )
+    return sent
